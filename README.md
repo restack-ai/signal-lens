@@ -1,5 +1,7 @@
 # SignalLens
 
+![](./docs/assets/architecture.png)
+
 SignalLens is an AI-assisted public company risk intelligence dashboard. It helps analysts move from evidence to explanation to action:
 
 1. identify which company is risky,
