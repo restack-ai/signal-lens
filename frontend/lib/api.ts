@@ -21,16 +21,24 @@ export type TrendPoint = {
 export type RiskEvent = {
   id: number;
   title: string;
+  company_id: number;
   company: string;
   ticker: string;
   topic: string;
+  topic_label: string;
+  source_type: "SEC" | "RSS" | "Web" | "GDELT" | "CompanyReport";
   source_name: string;
   source_url: string;
+  extracted_at: string;
   event_date: string;
   severity: "low" | "medium" | "high" | "critical";
   confidence: number;
   risk_score: number;
+  exposure_score: number;
   summary: string;
+  evidence_excerpt: string;
+  risk_driver_summary: string;
+  suggested_action: string;
 };
 
 export type DashboardData = {

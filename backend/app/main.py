@@ -63,16 +63,24 @@ def list_events(limit: int = 50, session: Session = Depends(get_session)) -> lis
         RiskEventRead(
             id=event.id,
             title=event.title,
+            company_id=company.id,
             company=company.name,
             ticker=company.ticker,
             topic=topic.name,
+            topic_label=topic.name,
+            source_type=event.source_type,
             source_name=event.source_name,
             source_url=event.source_url,
+            extracted_at=event.extracted_at,
             event_date=event.event_date,
             severity=event.severity,
             confidence=event.confidence,
             risk_score=event.risk_score,
+            exposure_score=event.exposure_score,
             summary=event.summary,
+            evidence_excerpt=event.evidence_excerpt,
+            risk_driver_summary=event.risk_driver_summary,
+            suggested_action=event.suggested_action,
         )
         for event, company, topic in rows
     ]
@@ -119,12 +127,28 @@ def dashboard(session: Session = Depends(get_session)) -> DashboardRead:
 
     latest_events = list_events(limit=12, session=session)
     top_exposure = exposure_rows[0] if exposure_rows else None
-    top_topic = max(heatmap_rows, key=lambda row: row.score or 0) if heatmap_rows else None
+    top_company_events = [
+        event for event in latest_events if top_exposure and event.company == top_exposure.company_name
+    ]
+    top_company_topics = sorted(
+        {event.topic for event in top_company_events},
+        key=lambda topic: sum(event.risk_score for event in top_company_events if event.topic == topic),
+        reverse=True,
+    )
+    top_driver = max(top_company_events, key=lambda event: event.risk_score, default=None)
+    evidence_count = len(top_company_events)
+    avg_confidence = (
+        round(sum(event.confidence for event in top_company_events) / evidence_count, 2)
+        if evidence_count
+        else 0
+    )
     summary_body = (
-        f"{top_exposure.company_name} currently has the highest seeded exposure score at {int(top_exposure.exposure)}. "
-        f"The strongest topic signal is {top_topic.topic_name} for {top_topic.company_name}, based on mock public-risk events. "
-        "Real RSS, web, and SEC ingestion workers can attach to the same event schema later."
-        if top_exposure and top_topic
+        f"{top_exposure.company_name} risk exposure is elevated mainly due to "
+        f"{', '.join(top_company_topics[:2]) or 'seeded public-risk signals'}. "
+        f"The strongest driver is {top_driver.topic if top_driver else 'a repeated risk signal'}, "
+        f"supported by {evidence_count} seeded public-risk events. "
+        f"Average confidence is {avg_confidence:.0%} based on mock source credibility, repeated topic signals, and extraction quality."
+        if top_exposure
         else "Seed the database to generate a risk summary."
     )
 
@@ -153,7 +177,7 @@ def dashboard(session: Session = Depends(get_session)) -> DashboardRead:
         ],
         latest_events=latest_events,
         ai_summary=SummaryPanel(
-            title="AI Risk Brief",
+            title="Risk Drivers",
             body=summary_body,
             generated_at=date.today(),
         ),

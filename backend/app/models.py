@@ -13,6 +13,14 @@ class RiskSeverity(str, Enum):
     critical = "critical"
 
 
+class SourceType(str, Enum):
+    SEC = "SEC"
+    RSS = "RSS"
+    Web = "Web"
+    GDELT = "GDELT"
+    CompanyReport = "CompanyReport"
+
+
 class CompanyBase(SQLModel):
     name: str = Field(index=True)
     ticker: str = Field(index=True, unique=True)
@@ -45,11 +53,17 @@ class RiskEventBase(SQLModel):
     title: str
     source_name: str
     source_url: str
+    source_type: SourceType = Field(default=SourceType.Web, index=True)
     event_date: date = Field(index=True)
     severity: RiskSeverity = Field(index=True)
     confidence: float = Field(ge=0, le=1)
     risk_score: int = Field(ge=0, le=100, index=True)
+    exposure_score: int = Field(default=0, ge=0, le=100, index=True)
     summary: str = Field(sa_column=Column(Text))
+    evidence_excerpt: str = Field(default="", sa_column=Column(Text))
+    risk_driver_summary: str = Field(default="", sa_column=Column(Text))
+    suggested_action: str = Field(default="", sa_column=Column(Text))
+    extracted_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     raw_text: str = Field(sa_column=Column(Text))
     ingestion_source: str = Field(default="mock_seed")
 

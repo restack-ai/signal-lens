@@ -1,9 +1,9 @@
 from datetime import date, timedelta
 
-from sqlmodel import Session, delete, select
+from sqlmodel import SQLModel, Session
 
 from app.database import engine, init_db
-from app.models import Company, CompanySummary, RiskEvent, RiskSeverity, RiskTopic
+from app.models import Company, CompanySummary, RiskEvent, RiskSeverity, RiskTopic, SourceType
 
 
 COMPANIES = [
@@ -33,34 +33,123 @@ TOPICS = [
 ]
 
 EVENT_TEMPLATES = [
-    ("Regulatory scrutiny expands for {name}", "Regulation", "high", 82),
-    ("Supplier bottleneck pressures {name} production plans", "Supply Chain", "medium", 64),
-    ("New litigation filing names {name}", "Litigation", "medium", 58),
-    ("Cyber risk bulletin flags vendor exposure at {name}", "Cybersecurity", "high", 76),
-    ("Product safety review opened for {name}", "Product Safety", "high", 79),
-    ("Management transition raises execution questions at {name}", "Management", "medium", 61),
-    ("Climate reporting expectations tighten for {name}", "Climate", "low", 42),
-    ("Labor negotiations intensify around {name} facilities", "Labor", "medium", 67),
-    ("Accounting control review noted for {name}", "Accounting", "medium", 55),
-    ("Geopolitical trade restrictions affect {name} outlook", "Geopolitics", "high", 73),
+    {
+        "title": "Regulatory scrutiny expands for {name}",
+        "topic": "Regulation",
+        "severity": "high",
+        "score": 82,
+        "source_type": SourceType.SEC,
+        "source_name": "Seeded SEC Risk Extract",
+        "excerpt": "The company disclosed expanded regulatory requests and additional compliance review activity in a seeded filing excerpt.",
+        "driver": "Regulatory review is the primary driver because repeated seeded disclosures point to higher compliance burden and possible operating constraints.",
+        "action": "Review recent 10-K and 10-Q risk factor language for changes in regulatory exposure.",
+    },
+    {
+        "title": "Supplier bottleneck pressures {name} production plans",
+        "topic": "Supply Chain",
+        "severity": "medium",
+        "score": 64,
+        "source_type": SourceType.RSS,
+        "source_name": "Seeded Industry RSS Brief",
+        "excerpt": "Seeded supplier coverage describes component availability pressure and longer lead times affecting production planning.",
+        "driver": "Supply chain pressure contributes to risk through delayed capacity plans and concentration in key suppliers.",
+        "action": "Compare supplier concentration, inventory commentary, and production guidance across peers.",
+    },
+    {
+        "title": "New litigation filing names {name}",
+        "topic": "Litigation",
+        "severity": "medium",
+        "score": 58,
+        "source_type": SourceType.Web,
+        "source_name": "Seeded Court Watch",
+        "excerpt": "A seeded legal item cites a new complaint naming the company and requesting damages and injunctive relief.",
+        "driver": "Litigation risk is rising because a new seeded matter could create legal cost and disclosure pressure.",
+        "action": "Track docket milestones and compare the matter against disclosed legal contingencies.",
+    },
+    {
+        "title": "Cyber risk bulletin flags vendor exposure at {name}",
+        "topic": "Cybersecurity",
+        "severity": "high",
+        "score": 76,
+        "source_type": SourceType.Web,
+        "source_name": "Seeded Cyber Advisory",
+        "excerpt": "The seeded bulletin references third-party access paths and possible downstream exposure for enterprise customers.",
+        "driver": "Cybersecurity risk is material because vendor exposure can propagate across operations and customer trust.",
+        "action": "Review security incident disclosures, vendor dependencies, and remediation statements.",
+    },
+    {
+        "title": "Product safety review opened for {name}",
+        "topic": "Product Safety",
+        "severity": "high",
+        "score": 79,
+        "source_type": SourceType.GDELT,
+        "source_name": "Seeded Safety Monitor",
+        "excerpt": "Seeded public coverage describes a product safety review following customer reports and regulator questions.",
+        "driver": "Product safety is a strong driver because reviews can lead to recalls, warranty costs, and reputation impact.",
+        "action": "Check recall databases, warranty accrual commentary, and product incident trend data.",
+    },
+    {
+        "title": "Management transition raises execution questions at {name}",
+        "topic": "Management",
+        "severity": "medium",
+        "score": 61,
+        "source_type": SourceType.CompanyReport,
+        "source_name": "Seeded Company Report",
+        "excerpt": "A seeded company update notes leadership changes in a business unit tied to strategic execution.",
+        "driver": "Management transition contributes to risk when execution ownership changes during active operating pressure.",
+        "action": "Review leadership tenure, segment performance, and guidance revisions after the transition.",
+    },
+    {
+        "title": "Climate reporting expectations tighten for {name}",
+        "topic": "Climate",
+        "severity": "low",
+        "score": 42,
+        "source_type": SourceType.RSS,
+        "source_name": "Seeded Climate Policy Feed",
+        "excerpt": "Seeded policy coverage describes tighter emissions reporting expectations for companies in exposed sectors.",
+        "driver": "Climate risk is currently lower but creates reporting and transition-cost follow-up requirements.",
+        "action": "Compare emissions disclosures, transition plans, and regulatory exposure by geography.",
+    },
+    {
+        "title": "Labor negotiations intensify around {name} facilities",
+        "topic": "Labor",
+        "severity": "medium",
+        "score": 67,
+        "source_type": SourceType.Web,
+        "source_name": "Seeded Labor News",
+        "excerpt": "Seeded local coverage describes intensified negotiations, worker demands, and possible facility disruption.",
+        "driver": "Labor risk is increasing because negotiations could affect productivity, cost structure, and delivery timing.",
+        "action": "Monitor negotiation deadlines, union statements, and site-level operating exposure.",
+    },
+    {
+        "title": "Accounting control review noted for {name}",
+        "topic": "Accounting",
+        "severity": "medium",
+        "score": 55,
+        "source_type": SourceType.SEC,
+        "source_name": "Seeded Filing Review",
+        "excerpt": "Seeded filing language references internal-control review activity and financial reporting process remediation.",
+        "driver": "Accounting risk is a driver when controls language suggests reporting quality should be monitored.",
+        "action": "Inspect auditor language, material weakness disclosures, and remediation timelines.",
+    },
+    {
+        "title": "Geopolitical trade restrictions affect {name} outlook",
+        "topic": "Geopolitics",
+        "severity": "high",
+        "score": 73,
+        "source_type": SourceType.GDELT,
+        "source_name": "Seeded Trade Monitor",
+        "excerpt": "Seeded cross-border coverage describes tighter trade restrictions and possible demand or supply impacts.",
+        "driver": "Geopolitical exposure is material where trade controls affect revenue access or component sourcing.",
+        "action": "Map revenue and supplier exposure by restricted geography and monitor policy updates.",
+    },
 ]
-
-
-def reset_data(session: Session) -> None:
-    session.exec(delete(CompanySummary))
-    session.exec(delete(RiskEvent))
-    session.exec(delete(RiskTopic))
-    session.exec(delete(Company))
-    session.commit()
-
 
 def seed() -> None:
     init_db()
+    SQLModel.metadata.drop_all(engine)
+    SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
-        existing = session.exec(select(Company)).first()
-        if existing:
-            reset_data(session)
-
         topics = {
             name: RiskTopic(name=name, description=description)
             for name, description in TOPICS
@@ -87,21 +176,30 @@ def seed() -> None:
             company_score_total = 0
             for event_index in range(5):
                 template_index = (company_index + event_index) % len(EVENT_TEMPLATES)
-                title_template, topic_name, severity, base_score = EVENT_TEMPLATES[template_index]
+                template = EVENT_TEMPLATES[template_index]
+                topic_name = template["topic"]
+                severity = template["severity"]
+                base_score = template["score"]
                 score = min(96, max(20, base_score + ((company_index * 7 + event_index * 5) % 13) - 6))
+                confidence = round(0.72 + ((company_index + event_index) % 4) * 0.06, 2)
                 company_score_total += score
                 event = RiskEvent(
                     company_id=company.id,
                     topic_id=topics[topic_name].id,
-                    title=title_template.format(name=company.name),
-                    source_name="SignalLens Mock Feed",
-                    source_url=f"https://example.com/mock/{company.ticker.lower()}/{event_index}",
+                    title=template["title"].format(name=company.name),
+                    source_type=template["source_type"],
+                    source_name=template["source_name"],
+                    source_url=f"https://example.com/seeded-mock-risk/{company.ticker.lower()}/{topic_name.lower().replace(' ', '-')}-{event_index}",
                     event_date=today - timedelta(days=company_index * 2 + event_index * 6),
                     severity=RiskSeverity(severity),
-                    confidence=round(0.72 + ((company_index + event_index) % 4) * 0.06, 2),
+                    confidence=confidence,
                     risk_score=score,
-                    summary=f"Mock signal indicates {topic_name.lower()} risk for {company.name}. The item is seeded data for dashboard development.",
-                    raw_text=f"{company.name} mock public risk item covering {topic_name}.",
+                    exposure_score=score,
+                    summary=f"Seeded mock signal indicates {topic_name.lower()} risk for {company.name}. This is not real public-source coverage.",
+                    evidence_excerpt=template["excerpt"].replace("The company", company.name),
+                    risk_driver_summary=template["driver"],
+                    suggested_action=template["action"],
+                    raw_text=f"{company.name} seeded mock public risk item covering {topic_name}. Evidence excerpt: {template['excerpt']}",
                 )
                 session.add(event)
 

@@ -1,8 +1,8 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
-from app.models import RiskSeverity
+from app.models import RiskSeverity, SourceType
 
 
 class CompanyRead(BaseModel):
@@ -24,16 +24,24 @@ class TopicRead(BaseModel):
 class RiskEventRead(BaseModel):
     id: int
     title: str
+    company_id: int
     company: str
     ticker: str
     topic: str
+    topic_label: str
+    source_type: SourceType
     source_name: str
     source_url: str
+    extracted_at: datetime
     event_date: date
     severity: RiskSeverity
     confidence: float
     risk_score: int
+    exposure_score: int
     summary: str
+    evidence_excerpt: str
+    risk_driver_summary: str
+    suggested_action: str
 
 
 class CompanyExposure(BaseModel):
