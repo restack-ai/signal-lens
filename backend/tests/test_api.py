@@ -1,6 +1,7 @@
 import pytest
 from sqlmodel import Session
 
+from app.config import settings
 from tests.conftest import make_company, make_event, make_topic
 
 
@@ -38,6 +39,22 @@ async def test_events_limit(client, db_session: Session):
 
 
 @pytest.mark.asyncio
+async def test_real_ingestion_mode_hides_mock_events(client, db_session: Session, monkeypatch):
+    monkeypatch.setattr(settings, "real_ingestion_mode", True)
+    topic = make_topic(db_session, name="Real Mode")
+    company = make_company(db_session, ticker="REAL")
+    mock_event = make_event(db_session, company, topic, risk_score=90, ingestion_source="mock_seed")
+    real_event = make_event(db_session, company, topic, risk_score=10, ingestion_source="rss")
+
+    response = await client.get("/events?limit=500")
+
+    assert response.status_code == 200
+    ids = {event["id"] for event in response.json()}
+    assert real_event.id in ids
+    assert mock_event.id not in ids
+
+
+@pytest.mark.asyncio
 async def test_events_limit_too_large_returns_422(client):
     response = await client.get("/events?limit=600")
     assert response.status_code == 422
@@ -52,8 +69,56 @@ async def test_dashboard_keys(client, db_session: Session):
     response = await client.get("/dashboard")
     assert response.status_code == 200
     data = response.json()
-    expected_keys = {"exposure_by_company", "topic_heatmap", "trend", "latest_events", "ai_summary"}
+    expected_keys = {
+        "exposure_by_company",
+        "topic_heatmap",
+        "trend",
+        "latest_events",
+        "company_events",
+        "ai_summary",
+        "meta",
+    }
     assert expected_keys.issubset(data.keys())
+
+
+@pytest.mark.asyncio
+async def test_dashboard_risk_view_excludes_raw_when_scored_events_exist(
+    client, db_session: Session, monkeypatch
+):
+    from app.models import IngestionStatus
+
+    monkeypatch.setattr(settings, "real_ingestion_mode", True)
+    topic = make_topic(db_session, name="Management")
+    company = make_company(db_session, name="Score Corp", ticker="SCOR")
+    make_event(
+        db_session,
+        company,
+        topic,
+        risk_score=99,
+        ingestion_source="rss",
+        status=IngestionStatus.extracted,
+    )
+    make_event(
+        db_session,
+        company,
+        topic,
+        risk_score=0,
+        ingestion_source="rss",
+        status=IngestionStatus.raw,
+    )
+
+    response = await client.get("/dashboard")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["meta"]["risk_view"] == "scored"
+    assert data["meta"]["scored_event_count"] >= 1
+    assert data["meta"]["pending_event_count"] >= 1
+    score_corp = next(
+        row for row in data["exposure_by_company"] if row["ticker"] == "SCOR"
+    )
+    assert score_corp["exposure"] == 99
+    assert score_corp["event_count"] == 1
 
 
 @pytest.mark.asyncio

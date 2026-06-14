@@ -77,12 +77,20 @@ class SummaryPanel(BaseModel):
     model_name: str | None = None
 
 
+class DashboardMeta(BaseModel):
+    pending_event_count: int
+    scored_event_count: int
+    risk_view: str
+
+
 class DashboardRead(BaseModel):
     exposure_by_company: list[CompanyExposure]
     topic_heatmap: list[TopicHeatmapCell]
     trend: list[TrendPoint]
     latest_events: list[RiskEventRead]
+    company_events: list[RiskEventRead]
     ai_summary: SummaryPanel
+    meta: DashboardMeta
 
 
 # ── Auth schemas ──────────────────────────────────────────────────────────────

@@ -20,6 +20,7 @@ from app.models import (
     AlertRule,
     Company,
     CompanySummary,
+    IngestionStatus,
     RiskEvent,
     RiskTopic,
     Tenant,
@@ -34,6 +35,7 @@ from app.schemas import (
     CompanyExposure,
     CompanyRead,
     DashboardRead,
+    DashboardMeta,
     RegisterRequest,
     RiskEventRead,
     SummaryPanel,
@@ -46,6 +48,13 @@ from app.schemas import (
 
 configure_logging()
 logger = get_logger(__name__)
+_MOCK_INGESTION_SOURCE = "mock_seed"
+_SCORED_STATUSES = (
+    IngestionStatus.extracted,
+    IngestionStatus.scored,
+    IngestionStatus.published,
+)
+_MIN_MATERIAL_CONFIDENCE = 0.5
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -132,6 +141,8 @@ def _fetch_events(
     limit: int,
     session: Session,
     current_user: Optional[User] = None,
+    company_ids: Optional[list[int]] = None,
+    statuses: Optional[tuple[IngestionStatus, ...]] = None,
 ) -> list[RiskEventRead]:
     query = (
         select(RiskEvent, Company, RiskTopic)
@@ -140,6 +151,13 @@ def _fetch_events(
         .order_by(RiskEvent.event_date.desc(), RiskEvent.risk_score.desc())
         .limit(limit)
     )
+    query = _apply_event_visibility_filter(query)
+    if company_ids is not None:
+        query = query.where(Company.id.in_(company_ids))
+    if statuses is not None:
+        query = query.where(RiskEvent.status.in_(statuses))
+        if statuses == _SCORED_STATUSES:
+            query = query.where(RiskEvent.confidence >= _MIN_MATERIAL_CONFIDENCE)
 
     if current_user is not None:
         watchlist_ids = session.exec(
@@ -182,6 +200,12 @@ def _fetch_events(
     ]
 
 
+def _apply_event_visibility_filter(query):
+    if settings.real_ingestion_mode:
+        return query.where(RiskEvent.ingestion_source != _MOCK_INGESTION_SOURCE)
+    return query
+
+
 @app.get("/dashboard", response_model=DashboardRead)
 @limiter.limit("60/minute")
 def dashboard(
@@ -198,12 +222,39 @@ def dashboard(
         ).all()
         watchlist_filter = list(wl)
 
+    visible_events_query = select(RiskEvent)
+    visible_events_query = _apply_event_visibility_filter(visible_events_query)
+    if watchlist_filter is not None:
+        visible_events_query = visible_events_query.where(
+            RiskEvent.company_id.in_(watchlist_filter)
+        )
+    scored_event_count = session.exec(
+        select(func.count()).select_from(
+            visible_events_query.where(
+                RiskEvent.status.in_(_SCORED_STATUSES),
+                RiskEvent.confidence >= _MIN_MATERIAL_CONFIDENCE,
+            ).subquery()
+        )
+    ).one()
+    pending_event_count = session.exec(
+        select(func.count()).select_from(
+            visible_events_query.where(RiskEvent.status == IngestionStatus.raw).subquery()
+        )
+    ).one()
+    risk_view_statuses = _SCORED_STATUSES if scored_event_count else None
+
     base_query = select(
         Company.name.label("company_name"),
         Company.ticker.label("ticker"),
         func.round(func.avg(RiskEvent.risk_score)).label("exposure"),
         func.count(RiskEvent.id).label("event_count"),
     ).join(RiskEvent, RiskEvent.company_id == Company.id)
+    base_query = _apply_event_visibility_filter(base_query)
+    if risk_view_statuses is not None:
+        base_query = base_query.where(
+            RiskEvent.status.in_(risk_view_statuses),
+            RiskEvent.confidence >= _MIN_MATERIAL_CONFIDENCE,
+        )
 
     if watchlist_filter is not None:
         base_query = base_query.where(Company.id.in_(watchlist_filter))
@@ -220,6 +271,12 @@ def dashboard(
     ).join(RiskEvent, RiskEvent.company_id == Company.id).join(
         RiskTopic, RiskEvent.topic_id == RiskTopic.id
     )
+    heatmap_query = _apply_event_visibility_filter(heatmap_query)
+    if risk_view_statuses is not None:
+        heatmap_query = heatmap_query.where(
+            RiskEvent.status.in_(risk_view_statuses),
+            RiskEvent.confidence >= _MIN_MATERIAL_CONFIDENCE,
+        )
     if watchlist_filter is not None:
         heatmap_query = heatmap_query.where(Company.id.in_(watchlist_filter))
 
@@ -231,6 +288,12 @@ def dashboard(
         Company.name.label("company_name"),
         func.round(func.avg(RiskEvent.risk_score)).label("score"),
     ).join(Company, RiskEvent.company_id == Company.id).where(RiskEvent.event_date >= start_date)
+    trend_query = _apply_event_visibility_filter(trend_query)
+    if risk_view_statuses is not None:
+        trend_query = trend_query.where(
+            RiskEvent.status.in_(risk_view_statuses),
+            RiskEvent.confidence >= _MIN_MATERIAL_CONFIDENCE,
+        )
     if watchlist_filter is not None:
         trend_query = trend_query.where(Company.id.in_(watchlist_filter))
 
@@ -238,10 +301,21 @@ def dashboard(
         trend_query.group_by(RiskEvent.event_date, Company.name).order_by(RiskEvent.event_date)
     ).all()
 
-    latest_events = _fetch_events(limit=12, session=session, current_user=current_user)
+    latest_events = _fetch_events(
+        limit=12,
+        session=session,
+        current_user=current_user,
+        statuses=risk_view_statuses,
+    )
     top_exposure = exposure_rows[0] if exposure_rows else None
+    company_events = _fetch_events(
+        limit=500,
+        session=session,
+        current_user=current_user,
+        statuses=risk_view_statuses,
+    )
     top_company_events = [
-        event for event in latest_events if top_exposure and event.company == top_exposure.company_name
+        event for event in company_events if top_exposure and event.company == top_exposure.company_name
     ]
     top_company_topics = sorted(
         {event.topic for event in top_company_events},
@@ -288,7 +362,13 @@ def dashboard(
             for row in trend_rows
         ],
         latest_events=latest_events,
+        company_events=company_events,
         ai_summary=ai_summary,
+        meta=DashboardMeta(
+            pending_event_count=int(pending_event_count or 0),
+            scored_event_count=int(scored_event_count or 0),
+            risk_view="scored" if scored_event_count else "raw",
+        ),
     )
 
 
@@ -303,13 +383,18 @@ def _company_summary_panel(
 ) -> SummaryPanel:
     # Prefer the most recent persisted, LLM-generated summary for the company.
     if company_name:
-        row = session.exec(
+        summary_query = (
             select(CompanySummary, Company)
             .join(Company, CompanySummary.company_id == Company.id)
             .where(Company.name == company_name)
             .order_by(CompanySummary.summary_date.desc())
             .limit(1)
-        ).first()
+        )
+        if settings.real_ingestion_mode:
+            summary_query = summary_query.where(
+                CompanySummary.model_name != "mock-risk-summarizer"
+            )
+        row = session.exec(summary_query).first()
         if row is not None:
             summary, _company = row
             return SummaryPanel(
@@ -347,7 +432,6 @@ def search_events(
     limit: int = Query(default=10, ge=1, le=100),
     session: Session = Depends(get_session),
 ) -> list[RiskEventRead]:
-    # Embed the query; stub returns zeros until a real embedding model is wired.
     from app.extraction.extractor import RiskExtractor
 
     extractor = RiskExtractor()
@@ -372,10 +456,16 @@ def search_events(
                 JOIN company c ON e.company_id = c.id
                 JOIN risktopic t ON e.topic_id = t.id
                 WHERE e.embedding IS NOT NULL
+                AND (:include_mock OR e.ingestion_source != :mock_ingestion_source)
                 ORDER BY e.embedding <=> CAST(:embedding AS vector)
                 LIMIT :limit
                 """
-            ).bindparams(embedding=embedding_str, limit=limit)
+            ).bindparams(
+                embedding=embedding_str,
+                include_mock=not settings.real_ingestion_mode,
+                mock_ingestion_source=_MOCK_INGESTION_SOURCE,
+                limit=limit,
+            )
         ).all()  # type: ignore[call-overload]
     except Exception:
         # Fallback to recency-ordered results when pgvector is unavailable

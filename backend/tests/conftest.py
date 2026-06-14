@@ -94,6 +94,8 @@ def make_event(
     company: Company,
     topic: RiskTopic,
     risk_score: int = 70,
+    ingestion_source: str = "test",
+    status: IngestionStatus = IngestionStatus.published,
 ) -> RiskEvent:
     from datetime import date
 
@@ -114,8 +116,8 @@ def make_event(
         risk_driver_summary="Test driver.",
         suggested_action="Test action.",
         raw_text="Test raw text.",
-        ingestion_source="test",
-        status=IngestionStatus.published,
+        ingestion_source=ingestion_source,
+        status=status,
     )
     session.add(event)
     session.commit()
