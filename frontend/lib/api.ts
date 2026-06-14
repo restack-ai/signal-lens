@@ -1,3 +1,5 @@
+import { getStoredToken } from "./auth";
+
 export type CompanyExposure = {
   company: string;
   ticker: string;
@@ -55,13 +57,63 @@ export type DashboardData = {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
+export function authHeader(): HeadersInit {
+  const token = getStoredToken();
+  if (token) {
+    return { Authorization: "Bearer " + token };
+  }
+  return {};
+}
+
 export async function getDashboard(): Promise<DashboardData> {
   const response = await fetch(`${API_BASE_URL}/dashboard`, {
     next: { revalidate: 30 },
+    headers: authHeader(),
   });
 
   if (!response.ok) {
     throw new Error(`SignalLens API returned ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function login(
+  email: string,
+  password: string,
+): Promise<{ access_token: string }> {
+  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Login failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function getMe(): Promise<{ email: string; role: string }> {
+  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+    headers: authHeader(),
+  });
+
+  if (!response.ok) {
+    throw new Error(`getMe failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function getWatchlist(): Promise<CompanyExposure[]> {
+  const response = await fetch(`${API_BASE_URL}/watchlist`, {
+    headers: authHeader(),
+  });
+
+  if (!response.ok) {
+    throw new Error(`getWatchlist failed: ${response.status}`);
   }
 
   return response.json();
