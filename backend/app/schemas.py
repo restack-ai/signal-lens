@@ -1,8 +1,9 @@
 from datetime import date, datetime
+from typing import Optional
 
 from pydantic import BaseModel
 
-from app.models import RiskSeverity, SourceType
+from app.models import IngestionStatus, RiskSeverity, SourceType, UserRole
 
 
 class CompanyRead(BaseModel):
@@ -42,6 +43,9 @@ class RiskEventRead(BaseModel):
     evidence_excerpt: str
     risk_driver_summary: str
     suggested_action: str
+    status: IngestionStatus
+    fetched_at: Optional[datetime] = None
+    content_hash: Optional[str] = None
 
 
 class CompanyExposure(BaseModel):
@@ -76,3 +80,29 @@ class DashboardRead(BaseModel):
     trend: list[TrendPoint]
     latest_events: list[RiskEventRead]
     ai_summary: SummaryPanel
+
+
+# ── Auth schemas ──────────────────────────────────────────────────────────────
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    tenant_name: str
+
+
+class LoginRequest(BaseModel):
+    username: str  # OAuth2 form field name
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class UserRead(BaseModel):
+    id: int
+    email: str
+    role: UserRole
+    tenant_id: int
+    is_active: bool
