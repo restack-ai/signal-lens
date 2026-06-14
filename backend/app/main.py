@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from datetime import date, timedelta
 from typing import Optional
 
@@ -41,8 +42,21 @@ from app.schemas import (
 configure_logging()
 logger = get_logger(__name__)
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    if settings.sentry_dsn:
+        import sentry_sdk
+
+        sentry_sdk.init(dsn=settings.sentry_dsn, environment=settings.environment)
+        logger.info("Sentry initialized", environment=settings.environment)
+
+    init_db()
+    logger.info("SignalLens API started", environment=settings.environment)
+    yield
+
+
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
-app = FastAPI(title="SignalLens API", version="0.2.0")
+app = FastAPI(title="SignalLens API", version="0.2.0", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -54,18 +68,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    if settings.sentry_dsn:
-        import sentry_sdk
-
-        sentry_sdk.init(dsn=settings.sentry_dsn, environment=settings.environment)
-        logger.info("Sentry initialized", environment=settings.environment)
-
-    init_db()
-    logger.info("SignalLens API started", environment=settings.environment)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
