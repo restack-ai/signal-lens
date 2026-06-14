@@ -66,7 +66,7 @@ class User(SQLModel, table=True):
 
 class TenantWatchlist(SQLModel, table=True):
     tenant_id: int = Field(foreign_key="tenant.id", primary_key=True)
-    company_id: int = Field(foreign_key="company.id", primary_key=True)
+    company_id: int = Field(foreign_key="company.id", primary_key=True, index=True)
     added_at: datetime = Field(default_factory=datetime.utcnow)
 
     tenant: Tenant = Relationship(back_populates="watchlists")

@@ -1,4 +1,4 @@
-"""Add retry accounting and alert rules
+"""Apply security, retry limits, alerting rules and database indexing improvements
 
 Revision ID: 0005
 Revises: 0004
@@ -17,18 +17,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "riskevent",
-        sa.Column("retry_count", sa.Integer(), nullable=False, server_default="0"),
-    )
+    # Add retry_count and error_message to riskevent
+    op.add_column("riskevent", sa.Column("retry_count", sa.Integer(), nullable=False, server_default="0"))
     op.add_column("riskevent", sa.Column("error_message", sa.Text(), nullable=True))
-    op.create_index(
-        op.f("ix_riskevent_retry_count"),
-        "riskevent",
-        ["retry_count"],
-        unique=False,
-    )
+    op.create_index(op.f("ix_riskevent_retry_count"), "riskevent", ["retry_count"], unique=False)
 
+    # Add index on tenantwatchlist.company_id
+    op.create_index(op.f("ix_tenantwatchlist_company_id"), "tenantwatchlist", ["company_id"], unique=False)
+
+    # Create alertrule table
     op.create_table(
         "alertrule",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -56,6 +53,8 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_alertrule_company_id"), table_name="alertrule")
     op.drop_index(op.f("ix_alertrule_tenant_id"), table_name="alertrule")
     op.drop_table("alertrule")
+
+    op.drop_index(op.f("ix_tenantwatchlist_company_id"), table_name="tenantwatchlist")
 
     op.drop_index(op.f("ix_riskevent_retry_count"), table_name="riskevent")
     op.drop_column("riskevent", "error_message")
