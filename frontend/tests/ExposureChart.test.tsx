@@ -1,8 +1,6 @@
+import { cloneElement, type ReactElement } from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-
-import { ExposureChart } from "@/components/dashboard/ExposureChart";
-import type { CompanyExposure } from "@/lib/api";
 
 // recharts uses ResizeObserver which is not available in jsdom
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
@@ -10,6 +8,24 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
   unobserve: vi.fn(),
   disconnect: vi.fn(),
 }));
+
+// ResponsiveContainer measures its parent via getBoundingClientRect, which
+// returns 0×0 in jsdom — so the chart (and its axis labels) never render.
+// Replace it with a fixed-size wrapper so the real chart lays out.
+vi.mock("recharts", async () => {
+  const actual = await vi.importActual<typeof import("recharts")>("recharts");
+  return {
+    ...actual,
+    ResponsiveContainer: ({ children }: { children: ReactElement }) => (
+      <div style={{ width: 800, height: 400 }}>
+        {cloneElement(children, { width: 800, height: 400 })}
+      </div>
+    ),
+  };
+});
+
+import { ExposureChart } from "@/components/dashboard/ExposureChart";
+import type { CompanyExposure } from "@/lib/api";
 
 const mockData: CompanyExposure[] = [
   { company: "Acme Corp", ticker: "ACME", exposure: 82, event_count: 5 },

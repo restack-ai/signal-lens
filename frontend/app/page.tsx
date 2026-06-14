@@ -41,7 +41,11 @@ export default function Home() {
     setLoading(true); setError(null);
     getDashboard().then((d) => { setData(d); setLoading(false); }).catch((e: Error) => { setError(e.message); setLoading(false); });
   }
-  useEffect(() => { fetchData(); }, []);
+  // State is set inside the async .then/.catch callbacks (not synchronously in
+  // the effect body), and loading defaults to true, so no setState on mount.
+  useEffect(() => {
+    getDashboard().then((d) => { setData(d); setLoading(false); }).catch((e: Error) => { setError(e.message); setLoading(false); });
+  }, []);
 
   const d = useMemo(() => (data ? deriveDashboard(data, selectedCompany) : null), [data, selectedCompany]);
 
