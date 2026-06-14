@@ -10,10 +10,6 @@ from app.logging import get_logger
 
 logger = get_logger(__name__)
 
-_EXTRACTION_MODEL = "claude-3-5-sonnet-latest"
-_EMBEDDING_MODEL = "text-embedding-3-small"
-
-
 @dataclass
 class ExtractionResult:
     topic: str
@@ -59,11 +55,11 @@ class RiskExtractor:
 
         try:
             response = self._client.messages.create(
-                model=_EXTRACTION_MODEL,
+                model=settings.anthropic_extraction_model,
                 max_tokens=4096,
                 system=system_message,  # type: ignore[arg-type]
                 tools=[EXTRACTION_TOOL],
-                tool_choice={"type": "any"},
+                tool_choice={"type": "auto"},
                 messages=[{"role": "user", "content": user_content}],
             )
         except anthropic.APIError as exc:
@@ -117,7 +113,7 @@ class RiskExtractor:
                     "Authorization": f"Bearer {settings.openai_api_key}",
                     "Content-Type": "application/json",
                 },
-                json={"model": _EMBEDDING_MODEL, "input": input_text},
+                json={"model": settings.openai_embedding_model, "input": input_text},
                 timeout=30,
             )
             response.raise_for_status()
@@ -125,5 +121,9 @@ class RiskExtractor:
             embedding = payload["data"][0]["embedding"]
             return [float(value) for value in embedding]
         except Exception as exc:
-            logger.error("Embedding generation failed", model=_EMBEDDING_MODEL, error=str(exc))
+            logger.error(
+                "Embedding generation failed",
+                model=settings.openai_embedding_model,
+                error=str(exc),
+            )
             return []

@@ -6,9 +6,13 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     environment: str = "development"  # development | staging | production
     seed_on_start: bool = True  # False in prod
+    real_ingestion_mode: bool = False  # Hide seeded mock risk signals from read APIs
     redis_url: str = "redis://localhost:6379/0"
     anthropic_api_key: str = ""
+    anthropic_extraction_model: str = "claude-sonnet-4-6"
+    anthropic_summary_model: str = "claude-haiku-4-5-20251001"
     openai_api_key: str = ""
+    openai_embedding_model: str = "text-embedding-3-small"
     secret_key: str = "dev-secret-change-in-prod"  # JWT signing
     clickhouse_url: str = ""  # optional
     sentry_dsn: str = ""  # optional

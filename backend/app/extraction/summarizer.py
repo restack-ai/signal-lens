@@ -10,7 +10,6 @@ from app.models import Company, CompanySummary, IngestionStatus, RiskEvent
 
 logger = get_logger(__name__)
 
-_SUMMARY_MODEL = "claude-3-5-haiku-latest"
 _LOOKBACK_DAYS = 30
 
 
@@ -35,7 +34,7 @@ class CompanySummarizer:
 
         try:
             response = self._client.messages.create(
-                model=_SUMMARY_MODEL,
+                model=settings.anthropic_summary_model,
                 max_tokens=512,
                 system=SUMMARY_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_content}],
@@ -82,7 +81,7 @@ class CompanySummarizer:
             if existing:
                 existing.summary = summary_text
                 existing.risk_score = avg_score
-                existing.model_name = _SUMMARY_MODEL
+                existing.model_name = settings.anthropic_summary_model
                 session.add(existing)
             else:
                 session.add(
@@ -91,7 +90,7 @@ class CompanySummarizer:
                         summary_date=today,
                         risk_score=avg_score,
                         summary=summary_text,
-                        model_name=_SUMMARY_MODEL,
+                        model_name=settings.anthropic_summary_model,
                     )
                 )
             session.commit()
