@@ -31,6 +31,7 @@ export function EventsTable({
   total,
   onPageChange,
   onEventClick,
+  scorePendingMode = false,
 }: {
   events: RiskEvent[];
   page: number;
@@ -38,6 +39,7 @@ export function EventsTable({
   total: number;
   onPageChange: (page: number) => void;
   onEventClick?: (event: RiskEvent) => void;
+  scorePendingMode?: boolean;
 }) {
   const start = page * pageSize + 1;
   const end = Math.min(page * pageSize + pageSize, total);
@@ -55,7 +57,7 @@ export function EventsTable({
               <TableHead scope="col">Severity</TableHead>
               <TableHead scope="col">Evidence</TableHead>
               <TableHead scope="col" className="text-right">
-                Score
+                {scorePendingMode ? "Extraction" : "Score"}
               </TableHead>
               <TableHead scope="col">Action</TableHead>
             </TableRow>
@@ -102,12 +104,12 @@ export function EventsTable({
                 </TableCell>
                 <TableCell
                   className="text-right font-semibold"
-                  style={{ color: severityFill[event.severity] }}
+                  style={{ color: scorePendingMode ? undefined : severityFill[event.severity] }}
                 >
-                  {event.exposure_score}
+                  {scorePendingMode ? "Pending" : event.exposure_score || event.risk_score}
                 </TableCell>
                 <TableCell className="min-w-[240px] text-xs leading-5 text-muted-foreground">
-                  {event.suggested_action}
+                  {event.suggested_action || (scorePendingMode ? "Run extraction/scoring" : "")}
                 </TableCell>
               </TableRow>
             ))}

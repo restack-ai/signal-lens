@@ -61,11 +61,17 @@ export type DashboardData = {
   topic_heatmap: TopicHeatmapCell[];
   trend: TrendPoint[];
   latest_events: RiskEvent[];
+  company_events: RiskEvent[];
   ai_summary: {
     title: string;
     body: string;
     generated_at: string;
     model_name: string | null;
+  };
+  meta: {
+    pending_event_count: number;
+    scored_event_count: number;
+    risk_view: "raw" | "scored";
   };
 };
 

@@ -16,6 +16,17 @@ function confidenceLabel(value: number) {
   return "low";
 }
 
+function dedupeEvents(events: RiskEvent[]) {
+  const seen = new Set<string>();
+  return events.filter((event) => {
+    const normalizedTitle = event.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const key = event.content_hash ?? `${event.source_url}:${normalizedTitle}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function DriverStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-border p-3">
@@ -48,7 +59,10 @@ export function CompanyDrawer({
 }) {
   if (!company) return null;
 
-  const latestEvents = events.slice(0, 4);
+  const materialEvents = dedupeEvents(events);
+  const latestEvents = materialEvents.slice(0, 4);
+  const evidenceEvents = materialEvents.slice(0, 8);
+  const hiddenEvidenceCount = Math.max(materialEvents.length - evidenceEvents.length, 0);
   const avgConf = averageConfidence ?? 0;
   const topTopic = topicScores?.[0]?.topic ?? "regulation";
 
@@ -87,7 +101,7 @@ export function CompanyDrawer({
       <div className="grid gap-5 overflow-y-auto p-5">
         <div className="grid grid-cols-3 gap-3 text-sm">
           <DriverStat label="Exposure" value={exposure?.toString() ?? "—"} />
-          <DriverStat label="Evidence" value={events.length.toString()} />
+          <DriverStat label="Evidence" value={materialEvents.length.toString()} />
           <DriverStat
             label="Confidence"
             value={`${Math.round(avgConf * 100)}%`}
@@ -155,7 +169,7 @@ export function CompanyDrawer({
             Evidence list
           </h3>
           <div className="mt-3 grid gap-3">
-            {events.map((event) => (
+            {evidenceEvents.map((event) => (
               <div className="rounded-md bg-slate-50 p-3" key={event.id}>
                 <div className="text-xs font-medium text-muted-foreground">
                   {sourceLabel(event.source_type)} · {event.source_name} ·
@@ -166,6 +180,11 @@ export function CompanyDrawer({
                 </p>
               </div>
             ))}
+            {hiddenEvidenceCount ? (
+              <div className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+                {hiddenEvidenceCount} additional material events hidden from this compact evidence view.
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -175,13 +194,12 @@ export function CompanyDrawer({
           </h3>
           <div className="mt-3 flex flex-wrap gap-2">
             {questions.map((question) => (
-              <button
-                className="rounded-md border border-border px-3 py-2 text-xs font-medium hover:border-primary"
+              <span
+                className="rounded-md border border-border bg-slate-50 px-3 py-2 text-xs font-medium text-muted-foreground"
                 key={question}
-                type="button"
               >
                 {question}
-              </button>
+              </span>
             ))}
           </div>
         </section>
