@@ -1,6 +1,7 @@
+import os
 from datetime import date, timedelta
 
-from sqlmodel import SQLModel, Session
+from sqlmodel import Session, select
 
 from app.database import engine, init_db
 from app.models import Company, CompanySummary, RiskEvent, RiskSeverity, RiskTopic, SourceType
@@ -145,31 +146,52 @@ EVENT_TEMPLATES = [
     },
 ]
 
+
 def seed() -> None:
     init_db()
-    SQLModel.metadata.drop_all(engine)
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        topics = {
-            name: RiskTopic(name=name, description=description)
-            for name, description in TOPICS
-        }
-        session.add_all(topics.values())
-        session.commit()
 
+    with Session(engine) as session:
+        # Topics: insert only missing ones, keyed by name.
+        existing_topic_names = set(
+            session.exec(select(RiskTopic.name)).all()
+        )
+        topics: dict[str, RiskTopic] = {}
+        for name, description in TOPICS:
+            if name not in existing_topic_names:
+                topic = RiskTopic(name=name, description=description)
+                session.add(topic)
+                topics[name] = topic
+            else:
+                topics[name] = session.exec(
+                    select(RiskTopic).where(RiskTopic.name == name)
+                ).one()
+        session.commit()
+        # Refresh to ensure all topics have IDs.
+        for topic in topics.values():
+            session.refresh(topic)
+
+        # Companies: insert only missing ones, keyed by ticker.
+        existing_tickers = set(session.exec(select(Company.ticker)).all())
         companies: list[Company] = []
         for name, ticker, exchange, country, sector in COMPANIES:
-            company = Company(
-                name=name,
-                ticker=ticker,
-                exchange=exchange,
-                country=country,
-                sector=sector,
-                watchlist=True,
-            )
-            session.add(company)
-            companies.append(company)
+            if ticker not in existing_tickers:
+                company = Company(
+                    name=name,
+                    ticker=ticker,
+                    exchange=exchange,
+                    country=country,
+                    sector=sector,
+                    watchlist=True,
+                )
+                session.add(company)
+                companies.append(company)
+            else:
+                companies.append(
+                    session.exec(select(Company).where(Company.ticker == ticker)).one()
+                )
         session.commit()
+        for company in companies:
+            session.refresh(company)
 
         today = date.today()
         for company_index, company in enumerate(companies):
@@ -183,14 +205,31 @@ def seed() -> None:
                 score = min(96, max(20, base_score + ((company_index * 7 + event_index * 5) % 13) - 6))
                 confidence = round(0.72 + ((company_index + event_index) % 4) * 0.06, 2)
                 company_score_total += score
+
+                event_date = today - timedelta(days=company_index * 2 + event_index * 6)
+                source_url = (
+                    f"https://example.com/seeded-mock-risk/{company.ticker.lower()}/"
+                    f"{topic_name.lower().replace(' ', '-')}-{event_index}"
+                )
+
+                # Skip if this seeded event already exists (same company + url).
+                existing = session.exec(
+                    select(RiskEvent).where(
+                        RiskEvent.company_id == company.id,
+                        RiskEvent.source_url == source_url,
+                    )
+                ).first()
+                if existing:
+                    continue
+
                 event = RiskEvent(
                     company_id=company.id,
                     topic_id=topics[topic_name].id,
                     title=template["title"].format(name=company.name),
                     source_type=template["source_type"],
                     source_name=template["source_name"],
-                    source_url=f"https://example.com/seeded-mock-risk/{company.ticker.lower()}/{topic_name.lower().replace(' ', '-')}-{event_index}",
-                    event_date=today - timedelta(days=company_index * 2 + event_index * 6),
+                    source_url=source_url,
+                    event_date=event_date,
                     severity=RiskSeverity(severity),
                     confidence=confidence,
                     risk_score=score,
@@ -203,17 +242,32 @@ def seed() -> None:
                 )
                 session.add(event)
 
+            # Upsert summary: add only if none exists for today.
             avg_score = round(company_score_total / 5)
-            session.add(
-                CompanySummary(
-                    company_id=company.id,
-                    summary_date=today,
-                    risk_score=avg_score,
-                    summary=f"{company.name} shows a seeded risk profile with elevated attention around public signals and recent mock events.",
+            existing_summary = session.exec(
+                select(CompanySummary).where(
+                    CompanySummary.company_id == company.id,
+                    CompanySummary.summary_date == today,
                 )
-            )
+            ).first()
+            if not existing_summary:
+                session.add(
+                    CompanySummary(
+                        company_id=company.id,
+                        summary_date=today,
+                        risk_score=avg_score,
+                        summary=f"{company.name} shows a seeded risk profile with elevated attention around public signals and recent mock events.",
+                    )
+                )
         session.commit()
 
 
 if __name__ == "__main__":
-    seed()
+    # Respect SEED_ON_START so this module is safe to import anywhere; the
+    # __main__ block only runs when explicitly invoked or when the env var
+    # is truthy (docker-compose dev command calls `python -m app.seed`).
+    seed_flag = os.environ.get("SEED_ON_START", "true").lower()
+    if seed_flag in ("1", "true", "yes"):
+        seed()
+    else:
+        print("SEED_ON_START is not enabled; skipping seed.")
