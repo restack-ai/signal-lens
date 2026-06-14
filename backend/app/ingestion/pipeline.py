@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from sqlmodel import Session, select
 
@@ -132,7 +132,7 @@ def run_rss_ingestion(session: Session, days_back: int = 1) -> None:
     ingester = RSSIngester()
     pipeline = IngestPipeline(session)
     companies = session.exec(select(Company)).all()
-    cutoff = datetime.utcnow() - timedelta(days=days_back)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
 
     for company in companies:
         try:
@@ -144,9 +144,15 @@ def run_rss_ingestion(session: Session, days_back: int = 1) -> None:
         for item in items:
             published_str = item.get("published")
             try:
-                published_dt = datetime.fromisoformat(published_str) if published_str else datetime.utcnow()
+                published_dt = (
+                    datetime.fromisoformat(published_str)
+                    if published_str
+                    else datetime.now(timezone.utc)
+                )
             except ValueError:
-                published_dt = datetime.utcnow()
+                published_dt = datetime.now(timezone.utc)
+            if published_dt.tzinfo is None:
+                published_dt = published_dt.replace(tzinfo=timezone.utc)
 
             if published_dt < cutoff:
                 continue

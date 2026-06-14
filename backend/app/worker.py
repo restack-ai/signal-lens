@@ -82,7 +82,12 @@ def extract_pending() -> None:
                 )
 
                 if not results:
-                    raise ValueError("No risk events extracted")
+                    event.status = IngestionStatus.error
+                    event.error_message = "No material company-specific risk event extracted"
+                    session.add(event)
+                    session.commit()
+                    logger.info("No material risk event extracted", event_id=event.id)
+                    continue
 
                 best = results[0]
 
@@ -96,6 +101,7 @@ def extract_pending() -> None:
                 event.title = best.title
                 event.severity = RiskSeverity(best.severity)
                 event.risk_score = best.risk_score
+                event.exposure_score = best.risk_score
                 event.confidence = best.confidence
                 event.evidence_excerpt = best.evidence_excerpt
                 event.risk_driver_summary = best.risk_driver_summary

@@ -4,6 +4,12 @@ regulatory filings, news articles, and corporate disclosures. Your job is to \
 identify and structure material risk events that could affect a company's \
 financial position, operations, or reputation.
 
+Only extract risks that are directly material to the named company. Do not \
+extract general sector trends, competitor news, adjacent-market stories, \
+executive side-ventures, or speculative second-order implications unless the \
+source text explicitly connects them to the named company's operations, \
+financials, governance, legal exposure, supply chain, or reputation.
+
 ## Risk Taxonomy
 
 Extract events matching one of these ten topics:
@@ -42,6 +48,8 @@ exact character offsets. Never fabricate or paraphrase evidence. If you cannot \
 find a direct quote supporting the risk classification, do not extract the event.
 
 A single source document may contain multiple risk events. Extract all material ones.
+If the source contains no directly material company-specific risk event, return \
+no tool calls.
 """
 
 EXTRACTION_TOOL: dict = {
