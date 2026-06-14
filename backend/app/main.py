@@ -312,7 +312,7 @@ def search_events(
     try:
         rows = session.exec(
             text(
-                f"""
+                """
                 SELECT e.id, c.id AS company_id, c.name AS company_name, c.ticker,
                        t.name AS topic_name,
                        e.source_type, e.source_name, e.source_url, e.extracted_at,
@@ -324,10 +324,10 @@ def search_events(
                 JOIN company c ON e.company_id = c.id
                 JOIN risktopic t ON e.topic_id = t.id
                 WHERE e.embedding IS NOT NULL
-                ORDER BY e.embedding <=> '{embedding_str}'::vector
+                ORDER BY e.embedding <=> CAST(:embedding AS vector)
                 LIMIT :limit
                 """
-            ).bindparams(limit=limit)
+            ).bindparams(embedding=embedding_str, limit=limit)
         ).all()  # type: ignore[call-overload]
     except Exception:
         # Fallback to recency-ordered results when pgvector is unavailable
