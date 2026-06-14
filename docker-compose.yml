@@ -16,6 +16,19 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: signallens-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
 
   backend:
     build:
@@ -24,6 +37,9 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://signallens:signallens@db:5432/signallens
       CORS_ORIGINS: http://localhost:${FRONTEND_PORT:-3000}
+      REDIS_URL: redis://redis:6379/0
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SEED_ON_START: "true"
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -31,7 +47,34 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: sh -c "python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "
+        alembic upgrade head &&
+        python -m app.seed &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+    mem_limit: 512m
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+    container_name: signallens-worker
+    environment:
+      DATABASE_URL: postgresql+psycopg://signallens:signallens@db:5432/signallens
+      REDIS_URL: redis://redis:6379/0
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ./backend/app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.worker.celery_app worker -l info --beat
+    restart: unless-stopped
 
   frontend:
     build:
