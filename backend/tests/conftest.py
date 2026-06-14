@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.database import get_session
@@ -20,10 +21,12 @@ pytest_plugins = ["pytest_asyncio"]
 
 @pytest.fixture(scope="session")
 def test_engine():
-    # SQLite in-memory with check_same_thread disabled for async compat.
+    # SQLite in-memory shared across all connections via StaticPool, so the
+    # tables created here are visible to sessions opened in other fixtures.
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     SQLModel.metadata.create_all(engine)
     yield engine

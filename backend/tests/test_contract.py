@@ -9,7 +9,7 @@ from pathlib import Path
 
 from app.schemas import CompanyExposure, DashboardRead, RiskEventRead, TopicHeatmapCell, TrendPoint
 
-_TS_PATH = Path(__file__).parents[3] / "frontend" / "lib" / "api.ts"
+_TS_PATH = Path(__file__).parents[2] / "frontend" / "lib" / "api.ts"
 
 
 def _parse_ts_type_fields(ts_source: str, type_name: str) -> set[str]:
