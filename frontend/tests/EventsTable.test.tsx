@@ -26,6 +26,9 @@ function makeEvent(id: number): RiskEvent {
     evidence_excerpt: `Evidence for event ${id}`,
     risk_driver_summary: `Risk driver for event ${id}`,
     suggested_action: `Action for event ${id}`,
+    status: "published",
+    fetched_at: null,
+    content_hash: null,
   };
 }
 

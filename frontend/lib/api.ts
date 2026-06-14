@@ -7,6 +7,16 @@ export type CompanyExposure = {
   event_count: number;
 };
 
+export type Company = {
+  id: number;
+  name: string;
+  ticker: string;
+  exchange: string;
+  country: string;
+  sector: string;
+  watchlist: boolean;
+};
+
 export type TopicHeatmapCell = {
   company: string;
   topic: string;
@@ -41,6 +51,9 @@ export type RiskEvent = {
   evidence_excerpt: string;
   risk_driver_summary: string;
   suggested_action: string;
+  status: "raw" | "extracted" | "scored" | "published" | "error";
+  fetched_at: string | null;
+  content_hash: string | null;
 };
 
 export type DashboardData = {
@@ -52,8 +65,37 @@ export type DashboardData = {
     title: string;
     body: string;
     generated_at: string;
+    model_name: string | null;
   };
 };
+
+export type AlertRule = {
+  id: number;
+  tenant_id: number;
+  company_id: number;
+  topic: string;
+  threshold_score: number;
+  notify_email: string;
+  webhook_url: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type AlertRuleCreate = {
+  company_id: number;
+  topic: string;
+  threshold_score: number;
+  notify_email: string;
+  webhook_url?: string | null;
+};
+
+export type AlertRuleUpdate = Partial<{
+  topic: string;
+  threshold_score: number;
+  notify_email: string;
+  webhook_url: string | null;
+  is_active: boolean;
+}>;
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -107,7 +149,7 @@ export async function getMe(): Promise<{ email: string; role: string }> {
   return response.json();
 }
 
-export async function getWatchlist(): Promise<CompanyExposure[]> {
+export async function getWatchlist(): Promise<Company[]> {
   const response = await fetch(`${API_BASE_URL}/watchlist`, {
     headers: authHeader(),
   });
@@ -117,4 +159,58 @@ export async function getWatchlist(): Promise<CompanyExposure[]> {
   }
 
   return response.json();
+}
+
+export async function getAlertRules(): Promise<AlertRule[]> {
+  const response = await fetch(`${API_BASE_URL}/alerts/rules`, {
+    headers: authHeader(),
+  });
+
+  if (!response.ok) {
+    throw new Error(`getAlertRules failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function createAlertRule(rule: AlertRuleCreate): Promise<AlertRule> {
+  const response = await fetch(`${API_BASE_URL}/alerts/rules`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify(rule),
+  });
+
+  if (!response.ok) {
+    throw new Error(`createAlertRule failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function updateAlertRule(
+  ruleId: number,
+  rule: AlertRuleUpdate,
+): Promise<AlertRule> {
+  const response = await fetch(`${API_BASE_URL}/alerts/rules/${ruleId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify(rule),
+  });
+
+  if (!response.ok) {
+    throw new Error(`updateAlertRule failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function deleteAlertRule(ruleId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/alerts/rules/${ruleId}`, {
+    method: "DELETE",
+    headers: authHeader(),
+  });
+
+  if (!response.ok) {
+    throw new Error(`deleteAlertRule failed: ${response.status}`);
+  }
 }
