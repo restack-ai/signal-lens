@@ -56,7 +56,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"], storage_uri=settings.redis_url)
 app = FastAPI(title="SignalLens API", version="0.2.0", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -94,12 +94,13 @@ def list_companies(
                 TenantWatchlist.tenant_id == current_user.tenant_id
             )
         ).all()
-        if watchlist_ids:
-            return session.exec(
-                select(Company)
-                .where(Company.id.in_(watchlist_ids))
-                .order_by(Company.name)
-            ).all()
+        if not watchlist_ids:
+            return []
+        return session.exec(
+            select(Company)
+            .where(Company.id.in_(watchlist_ids))
+            .order_by(Company.name)
+        ).all()
     return session.exec(select(Company).order_by(Company.name)).all()
 
 
@@ -142,8 +143,9 @@ def _fetch_events(
                 TenantWatchlist.tenant_id == current_user.tenant_id
             )
         ).all()
-        if watchlist_ids:
-            query = query.where(Company.id.in_(watchlist_ids))
+        if not watchlist_ids:
+            return []
+        query = query.where(Company.id.in_(watchlist_ids))
 
     rows = session.exec(query).all()
     return [
@@ -190,8 +192,7 @@ def dashboard(
                 TenantWatchlist.tenant_id == current_user.tenant_id
             )
         ).all()
-        if wl:
-            watchlist_filter = list(wl)
+        watchlist_filter = list(wl)
 
     base_query = select(
         Company.name.label("company_name"),
@@ -200,7 +201,7 @@ def dashboard(
         func.count(RiskEvent.id).label("event_count"),
     ).join(RiskEvent, RiskEvent.company_id == Company.id)
 
-    if watchlist_filter:
+    if watchlist_filter is not None:
         base_query = base_query.where(Company.id.in_(watchlist_filter))
 
     exposure_rows = session.exec(
@@ -215,7 +216,7 @@ def dashboard(
     ).join(RiskEvent, RiskEvent.company_id == Company.id).join(
         RiskTopic, RiskEvent.topic_id == RiskTopic.id
     )
-    if watchlist_filter:
+    if watchlist_filter is not None:
         heatmap_query = heatmap_query.where(Company.id.in_(watchlist_filter))
 
     heatmap_rows = session.exec(heatmap_query.group_by(Company.name, RiskTopic.name)).all()
@@ -226,7 +227,7 @@ def dashboard(
         Company.name.label("company_name"),
         func.round(func.avg(RiskEvent.risk_score)).label("score"),
     ).join(Company, RiskEvent.company_id == Company.id).where(RiskEvent.event_date >= start_date)
-    if watchlist_filter:
+    if watchlist_filter is not None:
         trend_query = trend_query.where(Company.id.in_(watchlist_filter))
 
     trend_rows = session.exec(
