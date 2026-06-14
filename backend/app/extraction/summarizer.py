@@ -10,7 +10,7 @@ from app.models import Company, CompanySummary, IngestionStatus, RiskEvent
 
 logger = get_logger(__name__)
 
-_SUMMARY_MODEL = "claude-haiku-4-5-20251001"
+_SUMMARY_MODEL = "claude-3-5-haiku-latest"
 _LOOKBACK_DAYS = 30
 
 

@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     seed_on_start: bool = True  # False in prod
     redis_url: str = "redis://localhost:6379/0"
     anthropic_api_key: str = ""
+    openai_api_key: str = ""
     secret_key: str = "dev-secret-change-in-prod"  # JWT signing
     clickhouse_url: str = ""  # optional
     sentry_dsn: str = ""  # optional

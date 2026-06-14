@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import anthropic
+import httpx
 
 from app.config import settings
 from app.extraction.prompts import EXTRACTION_TOOL, SYSTEM_PROMPT
@@ -9,7 +10,8 @@ from app.logging import get_logger
 
 logger = get_logger(__name__)
 
-_EXTRACTION_MODEL = "claude-sonnet-4-6"
+_EXTRACTION_MODEL = "claude-3-5-sonnet-latest"
+_EMBEDDING_MODEL = "text-embedding-3-small"
 
 
 @dataclass
@@ -103,8 +105,25 @@ class RiskExtractor:
         return results
 
     def embed(self, text: str) -> list[float]:
-        # TODO: replace with a real embedding model (Cohere embed-v3, OpenAI
-        # text-embedding-3-small, or a local model). Anthropic does not offer
-        # a dedicated embeddings API. The infrastructure (pgvector column +
-        # migration) is in place; swap this stub when the model is chosen.
-        return [0.0] * 1536
+        if not settings.openai_api_key:
+            logger.info("OpenAI API key not configured; skipping embedding generation")
+            return []
+
+        input_text = text[:20_000] if len(text) > 20_000 else text
+        try:
+            response = httpx.post(
+                "https://api.openai.com/v1/embeddings",
+                headers={
+                    "Authorization": f"Bearer {settings.openai_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"model": _EMBEDDING_MODEL, "input": input_text},
+                timeout=30,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            embedding = payload["data"][0]["embedding"]
+            return [float(value) for value in embedding]
+        except Exception as exc:
+            logger.error("Embedding generation failed", model=_EMBEDDING_MODEL, error=str(exc))
+            return []

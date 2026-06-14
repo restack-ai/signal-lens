@@ -52,19 +52,24 @@ def ingest_rss() -> None:
 @celery_app.task(name="app.worker.extract_pending")
 def extract_pending() -> None:
     """Extract and score all RiskEvent rows currently in 'raw' status."""
-    from datetime import date
-
     from sqlmodel import Session, select
 
+    from app.analytics.clickhouse import ClickHouseClient
     from app.database import engine
     from app.extraction.extractor import RiskExtractor
     from app.models import IngestionStatus, RiskEvent, RiskSeverity, RiskTopic
+    from app.logging import get_logger
 
+    logger = get_logger(__name__)
     extractor = RiskExtractor()
+    clickhouse = ClickHouseClient()
 
     with Session(engine) as session:
         pending = session.exec(
-            select(RiskEvent).where(RiskEvent.status == IngestionStatus.raw)
+            select(RiskEvent).where(
+                RiskEvent.status == IngestionStatus.raw,
+                RiskEvent.retry_count < 3,
+            )
         ).all()
 
         for event in pending:
@@ -75,38 +80,55 @@ def extract_pending() -> None:
                     company_name=company.name if company else "",
                     source_type=event.source_type.value,
                 )
-            except Exception:
-                continue
 
-            if not results:
-                continue
+                if not results:
+                    raise ValueError("No risk events extracted")
 
-            best = results[0]
+                best = results[0]
 
-            # Resolve topic row; create if missing (shouldn't happen in prod).
-            topic_row = session.exec(
-                select(RiskTopic).where(RiskTopic.name == best.topic)
-            ).first()
-            if topic_row:
-                event.topic_id = topic_row.id
+                # Resolve topic row; create if missing (shouldn't happen in prod).
+                topic_row = session.exec(
+                    select(RiskTopic).where(RiskTopic.name == best.topic)
+                ).first()
+                if topic_row:
+                    event.topic_id = topic_row.id
 
-            event.title = best.title
-            event.severity = RiskSeverity(best.severity)
-            event.risk_score = best.risk_score
-            event.confidence = best.confidence
-            event.evidence_excerpt = best.evidence_excerpt
-            event.risk_driver_summary = best.risk_driver_summary
-            event.suggested_action = best.suggested_action
-            event.status = IngestionStatus.extracted
+                event.title = best.title
+                event.severity = RiskSeverity(best.severity)
+                event.risk_score = best.risk_score
+                event.confidence = best.confidence
+                event.evidence_excerpt = best.evidence_excerpt
+                event.risk_driver_summary = best.risk_driver_summary
+                event.suggested_action = best.suggested_action
+                event.status = IngestionStatus.extracted
+                event.error_message = None
 
-            if best.embedding:
-                event.embedding = best.embedding
-            elif not event.embedding:
-                event.embedding = extractor.embed(event.raw_text)
+                if best.embedding:
+                    event.embedding = best.embedding
+                elif not event.embedding:
+                    embedding = extractor.embed(event.raw_text)
+                    if embedding:
+                        event.embedding = embedding
 
-            session.add(event)
-
-        session.commit()
+                session.add(event)
+                session.commit()
+                session.refresh(event)
+                clickhouse.sync_events([event])
+            except Exception as exc:
+                session.rollback()
+                event.retry_count += 1
+                event.error_message = str(exc)[:2000]
+                if event.retry_count >= 3:
+                    event.status = IngestionStatus.error
+                session.add(event)
+                session.commit()
+                logger.warning(
+                    "Extraction failed",
+                    event_id=event.id,
+                    retry_count=event.retry_count,
+                    status=event.status,
+                    error=str(exc),
+                )
 
 
 @celery_app.task(name="app.worker.summarize_companies")

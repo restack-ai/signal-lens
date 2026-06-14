@@ -348,6 +348,8 @@ def search_events(
 
     extractor = RiskExtractor()
     query_embedding = extractor.embed(q)
+    if not query_embedding:
+        return _fetch_events(limit=limit, session=session)
 
     embedding_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
 

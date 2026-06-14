@@ -33,6 +33,7 @@ class IngestionStatus(str, Enum):
     extracted = "extracted"
     scored = "scored"
     published = "published"
+    error = "error"
 
 
 class UserRole(str, Enum):
@@ -122,6 +123,8 @@ class RiskEventBase(SQLModel):
     status: IngestionStatus = Field(default=IngestionStatus.published, index=True)
     fetched_at: Optional[datetime] = Field(default=None, index=True)
     content_hash: Optional[str] = Field(default=None, index=True)
+    retry_count: int = Field(default=0, index=True)
+    error_message: Optional[str] = Field(default=None, sa_column=Column(Text))
 
 
 class RiskEvent(RiskEventBase, table=True):
