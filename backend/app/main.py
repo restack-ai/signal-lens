@@ -18,6 +18,7 @@ from app.database import get_session, init_db
 from app.logging import RequestIDMiddleware, configure_logging, get_logger
 from app.models import (
     Company,
+    CompanySummary,
     RiskEvent,
     RiskTopic,
     Tenant,
@@ -249,14 +250,13 @@ def dashboard(
         if evidence_count
         else 0
     )
-    summary_body = (
-        f"{top_exposure.company_name} risk exposure is elevated mainly due to "
-        f"{', '.join(top_company_topics[:2]) or 'public-risk signals'}. "
-        f"The strongest driver is {top_driver.topic if top_driver else 'a repeated risk signal'}, "
-        f"supported by {evidence_count} risk events. "
-        f"Average confidence is {avg_confidence:.0%}."
-        if top_exposure
-        else "Seed the database to generate a risk summary."
+    ai_summary = _company_summary_panel(
+        session=session,
+        company_name=top_exposure.company_name if top_exposure else None,
+        topics=top_company_topics,
+        top_driver=top_driver,
+        evidence_count=evidence_count,
+        avg_confidence=avg_confidence,
     )
 
     return DashboardRead(
@@ -283,12 +283,53 @@ def dashboard(
             for row in trend_rows
         ],
         latest_events=latest_events,
-        ai_summary=SummaryPanel(
-            title="Risk Drivers",
-            body=summary_body,
-            generated_at=date.today(),
-        ),
+        ai_summary=ai_summary,
     )
+
+
+def _company_summary_panel(
+    *,
+    session: Session,
+    company_name: Optional[str],
+    topics: list[str],
+    top_driver: Optional[RiskEventRead],
+    evidence_count: int,
+    avg_confidence: float,
+) -> SummaryPanel:
+    # Prefer the most recent persisted, LLM-generated summary for the company.
+    if company_name:
+        row = session.exec(
+            select(CompanySummary, Company)
+            .join(Company, CompanySummary.company_id == Company.id)
+            .where(Company.name == company_name)
+            .order_by(CompanySummary.summary_date.desc())
+            .limit(1)
+        ).first()
+        if row is not None:
+            summary, _company = row
+            return SummaryPanel(
+                title="Risk Drivers",
+                body=summary.summary,
+                generated_at=summary.summary_date,
+                model_name=summary.model_name,
+            )
+
+    # Fallback: assemble from the latest events when no summary exists yet.
+    if not company_name:
+        return SummaryPanel(
+            title="Risk Drivers",
+            body="Seed the database to generate a risk summary.",
+            generated_at=date.today(),
+        )
+
+    body = (
+        f"{company_name} risk exposure is elevated mainly due to "
+        f"{', '.join(topics[:2]) or 'public-risk signals'}. "
+        f"The strongest driver is {top_driver.topic if top_driver else 'a repeated risk signal'}, "
+        f"supported by {evidence_count} risk events. "
+        f"Average confidence is {avg_confidence:.0%}."
+    )
+    return SummaryPanel(title="Risk Drivers", body=body, generated_at=date.today())
 
 
 # ── Semantic search ───────────────────────────────────────────────────────────

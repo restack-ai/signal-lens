@@ -72,6 +72,9 @@ class SummaryPanel(BaseModel):
     title: str
     body: str
     generated_at: date
+    # Set when the summary is an LLM-generated, persisted CompanySummary;
+    # None when assembled from the event-template fallback.
+    model_name: str | None = None
 
 
 class DashboardRead(BaseModel):
