@@ -17,6 +17,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+
     # Drop the text placeholder and replace with a proper vector column.
     # Existing NULL values are preserved by making the new column nullable.
     op.drop_column("riskevent", "embedding")
