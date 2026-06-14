@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-change-in-prod"  # JWT signing
     clickhouse_url: str = ""  # optional
     sentry_dsn: str = ""  # optional
+    alert_webhook_url: str = ""  # optional fallback webhook for alerts
+    alert_from_email: str = "alerts@signallens.local"
+    smtp_host: str = ""  # optional; when unset, email alerts are logged only
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = True
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

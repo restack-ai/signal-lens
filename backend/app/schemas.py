@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models import IngestionStatus, RiskSeverity, SourceType, UserRole
 
@@ -109,3 +109,31 @@ class UserRead(BaseModel):
     role: UserRole
     tenant_id: int
     is_active: bool
+
+
+class AlertRuleCreate(BaseModel):
+    company_id: int
+    topic: str
+    threshold_score: int = Field(ge=0, le=100)
+    notify_email: str
+    webhook_url: str | None = None
+
+
+class AlertRuleUpdate(BaseModel):
+    topic: str | None = None
+    threshold_score: int | None = Field(default=None, ge=0, le=100)
+    notify_email: str | None = None
+    webhook_url: str | None = None
+    is_active: bool | None = None
+
+
+class AlertRuleRead(BaseModel):
+    id: int
+    tenant_id: int
+    company_id: int
+    topic: str
+    threshold_score: int
+    notify_email: str
+    webhook_url: str | None
+    is_active: bool
+    created_at: datetime

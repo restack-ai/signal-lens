@@ -145,19 +145,16 @@ def summarize_companies() -> None:
 
 @celery_app.task(name="app.worker.check_alerts")
 def check_alerts() -> None:
-    """Check all configured alert rules and log any triggered alerts."""
-    from sqlmodel import Session
+    """Check all configured alert rules and deliver triggered alerts."""
+    from sqlmodel import Session, select
 
-    from app.analytics.alerts import AlertEngine, AlertRule
+    from app.analytics.alerts import AlertEngine
     from app.database import engine
-
-    # Alert rules are loaded from env/config in a real deployment. For now
-    # the engine starts with an empty rule set; operators add rules via the
-    # admin API (Phase 4 extension).
-    rules: list[AlertRule] = []
-    engine_instance = AlertEngine(rules)
+    from app.models import AlertRule
 
     with Session(engine) as session:
+        rules = session.exec(select(AlertRule).where(AlertRule.is_active == True)).all()  # noqa: E712
+        engine_instance = AlertEngine(list(rules))
         triggered = engine_instance.check(session)
         for alert in triggered:
             engine_instance.send(alert, session=session)

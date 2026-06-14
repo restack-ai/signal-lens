@@ -17,6 +17,7 @@ from app.config import settings
 from app.database import get_session, init_db
 from app.logging import RequestIDMiddleware, configure_logging, get_logger
 from app.models import (
+    AlertRule,
     Company,
     CompanySummary,
     RiskEvent,
@@ -27,6 +28,9 @@ from app.models import (
     UserRole,
 )
 from app.schemas import (
+    AlertRuleCreate,
+    AlertRuleRead,
+    AlertRuleUpdate,
     CompanyExposure,
     CompanyRead,
     DashboardRead,
@@ -537,3 +541,114 @@ def remove_from_watchlist(
     session.delete(entry)
     session.commit()
     return {"detail": "Removed from watchlist"}
+
+
+# ── Alert Rules ───────────────────────────────────────────────────────────────
+
+def _ensure_tenant_watchlist_company(
+    *,
+    session: Session,
+    tenant_id: int,
+    company_id: int,
+) -> Company:
+    company = session.get(Company, company_id)
+    if company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    watchlist_entry = session.exec(
+        select(TenantWatchlist).where(
+            TenantWatchlist.tenant_id == tenant_id,
+            TenantWatchlist.company_id == company_id,
+        )
+    ).first()
+    if watchlist_entry is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    return company
+
+
+@app.get("/alerts/rules", response_model=list[AlertRuleRead])
+@limiter.limit("60/minute")
+def list_alert_rules(
+    request: Request,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[AlertRule]:
+    return session.exec(
+        select(AlertRule)
+        .where(AlertRule.tenant_id == current_user.tenant_id)
+        .order_by(AlertRule.created_at.desc())
+    ).all()
+
+
+@app.post("/alerts/rules", response_model=AlertRuleRead, status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+def create_alert_rule(
+    request: Request,
+    rule_in: AlertRuleCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> AlertRule:
+    _ensure_tenant_watchlist_company(
+        session=session,
+        tenant_id=current_user.tenant_id,
+        company_id=rule_in.company_id,
+    )
+
+    rule = AlertRule(
+        tenant_id=current_user.tenant_id,
+        company_id=rule_in.company_id,
+        topic=rule_in.topic,
+        threshold_score=rule_in.threshold_score,
+        notify_email=rule_in.notify_email,
+        webhook_url=rule_in.webhook_url,
+    )
+    session.add(rule)
+    session.commit()
+    session.refresh(rule)
+    return rule
+
+
+@app.put("/alerts/rules/{rule_id}", response_model=AlertRuleRead)
+@limiter.limit("30/minute")
+def update_alert_rule(
+    request: Request,
+    rule_id: int,
+    rule_in: AlertRuleUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> AlertRule:
+    rule = session.get(AlertRule, rule_id)
+    if not rule or rule.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=404, detail="Alert rule not found")
+
+    if rule_in.topic is not None:
+        rule.topic = rule_in.topic
+    if rule_in.threshold_score is not None:
+        rule.threshold_score = rule_in.threshold_score
+    if rule_in.notify_email is not None:
+        rule.notify_email = rule_in.notify_email
+    if rule_in.webhook_url is not None:
+        rule.webhook_url = rule_in.webhook_url
+    if rule_in.is_active is not None:
+        rule.is_active = rule_in.is_active
+
+    session.add(rule)
+    session.commit()
+    session.refresh(rule)
+    return rule
+
+
+@app.delete("/alerts/rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
+def delete_alert_rule(
+    request: Request,
+    rule_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    rule = session.get(AlertRule, rule_id)
+    if not rule or rule.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=404, detail="Alert rule not found")
+    session.delete(rule)
+    session.commit()

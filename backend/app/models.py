@@ -89,6 +89,7 @@ class Company(CompanyBase, table=True):
 
     events: list["RiskEvent"] = Relationship(back_populates="company")
     summaries: list["CompanySummary"] = Relationship(back_populates="company")
+    alert_rules: list["AlertRule"] = Relationship(back_populates="company")
 
 
 class RiskTopicBase(SQLModel):
@@ -166,3 +167,17 @@ class CompanySummary(CompanySummaryBase, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     company: Company = Relationship(back_populates="summaries")
+
+
+class AlertRule(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: int = Field(foreign_key="tenant.id", index=True)
+    company_id: int = Field(foreign_key="company.id", index=True)
+    topic: str = Field(index=True)
+    threshold_score: int = Field(ge=0, le=100)
+    notify_email: str
+    webhook_url: Optional[str] = Field(default=None)
+    is_active: bool = Field(default=True, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    company: Company = Relationship(back_populates="alert_rules")

@@ -1,4 +1,4 @@
-"""Add retry accounting for extraction failures
+"""Add retry accounting and alert rules
 
 Revision ID: 0005
 Revises: 0004
@@ -29,8 +29,34 @@ def upgrade() -> None:
         unique=False,
     )
 
+    op.create_table(
+        "alertrule",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("company_id", sa.Integer(), nullable=False),
+        sa.Column("topic", sa.String(), nullable=False),
+        sa.Column("threshold_score", sa.Integer(), nullable=False),
+        sa.Column("notify_email", sa.String(), nullable=False),
+        sa.Column("webhook_url", sa.String(), nullable=True),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(["company_id"], ["company.id"]),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_alertrule_tenant_id"), "alertrule", ["tenant_id"], unique=False)
+    op.create_index(op.f("ix_alertrule_company_id"), "alertrule", ["company_id"], unique=False)
+    op.create_index(op.f("ix_alertrule_topic"), "alertrule", ["topic"], unique=False)
+    op.create_index(op.f("ix_alertrule_is_active"), "alertrule", ["is_active"], unique=False)
+
 
 def downgrade() -> None:
+    op.drop_index(op.f("ix_alertrule_is_active"), table_name="alertrule")
+    op.drop_index(op.f("ix_alertrule_topic"), table_name="alertrule")
+    op.drop_index(op.f("ix_alertrule_company_id"), table_name="alertrule")
+    op.drop_index(op.f("ix_alertrule_tenant_id"), table_name="alertrule")
+    op.drop_table("alertrule")
+
     op.drop_index(op.f("ix_riskevent_retry_count"), table_name="riskevent")
     op.drop_column("riskevent", "error_message")
     op.drop_column("riskevent", "retry_count")
