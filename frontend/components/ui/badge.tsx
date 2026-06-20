@@ -3,10 +3,10 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const severityStyles: Record<string, string> = {
-  low: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  medium: "bg-amber-50 text-amber-800 border-amber-200",
-  high: "bg-orange-50 text-orange-800 border-orange-200",
-  critical: "bg-red-50 text-red-700 border-red-200",
+  low: "border-signal-low/40 bg-signal-low/10 text-signal-low",
+  medium: "border-signal-medium/40 bg-signal-medium/10 text-signal-medium",
+  high: "border-signal-high/40 bg-signal-high/10 text-signal-high",
+  critical: "border-signal-critical/50 bg-signal-critical/15 text-signal-critical",
 };
 
 export function Badge({
@@ -17,8 +17,8 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
-        severityStyles[variant] ?? "border-border bg-muted text-muted-foreground",
+        "inline-flex items-center rounded-sm border px-1.5 py-px font-mono text-[10px] font-semibold uppercase tracking-[0.12em]",
+        severityStyles[variant] ?? "border-border-strong bg-muted text-muted-foreground",
         className,
       )}
       {...props}
