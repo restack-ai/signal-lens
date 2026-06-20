@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CornerDownLeft, Sparkles } from "lucide-react";
 
+import { API_BASE_URL, authHeader } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export type CopilotEvidence = { id: number; source: string; title: string };
@@ -14,67 +15,98 @@ type Message = {
   streaming?: boolean;
 };
 
+type Frame =
+  | { type: "citations"; items: CopilotEvidence[] }
+  | { type: "token"; text: string }
+  | { type: "done" }
+  | { type: "error"; message: string };
+
 export function CopilotRail({
   contextLabel,
-  answer,
-  evidence,
+  ticker,
   suggestions,
   onCite,
 }: {
   /** "Global" or an asset ticker — what the copilot is scoped to. */
   contextLabel: string;
-  /** Grounding text streamed as the answer (Phase 1 uses the derived summary). */
-  answer: string;
-  evidence: CopilotEvidence[];
+  /** Asset ticker to scope retrieval, or null for the whole portfolio. */
+  ticker: string | null;
   suggestions: string[];
   onCite?: (id: number) => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [target, setTarget] = useState<string | null>(null);
-  const [shown, setShown] = useState(0);
+  const [busy, setBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Simulated token streaming. All state updates happen inside the timeout
-  // callback (never synchronously in the effect body); when the last chunk
-  // lands it flips streaming off and attaches the evidence citations.
-  useEffect(() => {
-    if (target === null || shown >= target.length) return;
-    const t = setTimeout(() => {
-      const next = Math.min(target.length, shown + 3);
-      const done = next >= target.length;
-      setShown(next);
-      setMessages((prev) =>
-        prev.map((m, i) =>
-          i === prev.length - 1
-            ? {
-                ...m,
-                text: target.slice(0, next),
-                streaming: !done,
-                evidence: done ? evidence : m.evidence,
-              }
-            : m,
-        ),
-      );
-    }, 12);
-    return () => clearTimeout(t);
-  }, [target, shown, evidence]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
 
-  function ask(question: string) {
+  // Update the last (assistant) message from a streamed SSE frame.
+  function applyFrame(frame: Frame) {
+    setMessages((prev) =>
+      prev.map((m, i) => {
+        if (i !== prev.length - 1) return m;
+        if (frame.type === "citations") return { ...m, evidence: frame.items };
+        if (frame.type === "token") return { ...m, text: m.text + frame.text };
+        if (frame.type === "error")
+          return { ...m, text: frame.message, streaming: false };
+        return { ...m, streaming: false };
+      }),
+    );
+  }
+
+  async function ask(question: string) {
     const q = question.trim();
-    if (!q) return;
+    if (!q || busy) return;
     setInput("");
+    setBusy(true);
     setMessages((prev) => [
       ...prev,
       { role: "user", text: q },
-      { role: "assistant", text: "", streaming: true },
+      { role: "assistant", text: "", streaming: true, evidence: [] },
     ]);
-    setTarget(answer);
-    setShown(0);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/copilot`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader() },
+        body: JSON.stringify({ question: q, ticker }),
+      });
+      if (!res.ok || !res.body) throw new Error(`status ${res.status}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+          applyFrame(JSON.parse(line.slice(5).trim()) as Frame);
+        }
+      }
+      applyFrame({ type: "done" });
+    } catch {
+      setMessages((prev) =>
+        prev.map((m, i) =>
+          i === prev.length - 1
+            ? {
+                ...m,
+                text: m.text || "Copilot is unavailable right now.",
+                streaming: false,
+              }
+            : m,
+        ),
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -171,7 +203,7 @@ export function CopilotRail({
             type="submit"
             aria-label="Send"
             className="text-muted-foreground hover:text-primary disabled:opacity-40"
-            disabled={!input.trim()}
+            disabled={!input.trim() || busy}
           >
             <CornerDownLeft className="h-4 w-4" />
           </button>

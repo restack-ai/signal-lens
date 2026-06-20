@@ -8,7 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { NavRail } from "@/components/shell/NavRail";
 import { TopBar } from "@/components/shell/TopBar";
 import { CommandPalette } from "@/components/shell/CommandPalette";
-import { CopilotRail, type CopilotEvidence } from "@/components/shell/CopilotRail";
+import { CopilotRail } from "@/components/shell/CopilotRail";
 import { OverviewLens } from "@/components/lenses/OverviewLens";
 import { AssetLens } from "@/components/lenses/AssetLens";
 import { FeedLens } from "@/components/lenses/FeedLens";
@@ -93,15 +93,8 @@ export default function Home() {
   const onAssetLens = lens === "asset" && Boolean(dSel);
   const sel = onAssetLens && dSel ? dSel.selectedExposure : null;
 
-  // Copilot scope + grounding.
+  // Copilot scope (answers + citations come live from the /copilot endpoint).
   const contextLabel = sel ? sel.ticker : "Global";
-  const copilotAnswer = onAssetLens && dSel ? dSel.riskSummary : data.ai_summary.body;
-  const evidenceSource = (onAssetLens && dSel ? dSel.topDrivers : data.latest_events.slice(0, 3));
-  const copilotEvidence: CopilotEvidence[] = evidenceSource.slice(0, 3).map((ev) => ({
-    id: ev.id,
-    source: ev.source_type,
-    title: ev.title,
-  }));
   const copilotSuggestions = sel
     ? [
         `What changed for ${sel.ticker} recently?`,
@@ -202,8 +195,7 @@ export default function Home() {
           <CopilotRail
             key={contextLabel}
             contextLabel={contextLabel}
-            answer={copilotAnswer}
-            evidence={copilotEvidence}
+            ticker={sel ? sel.ticker : null}
             suggestions={copilotSuggestions}
             onCite={onCite}
           />
