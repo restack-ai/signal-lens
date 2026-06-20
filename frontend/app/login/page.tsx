@@ -39,7 +39,7 @@ export default function LoginPage() {
           <form className="grid gap-4" onSubmit={handleSubmit}>
             <div className="grid gap-1.5">
               <label
-                className="text-sm font-medium text-slate-900"
+                className="font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
                 htmlFor="email"
               >
                 Email
@@ -49,14 +49,14 @@ export default function LoginPage() {
                 type="email"
                 autoComplete="email"
                 required
-                className="rounded-md border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="rounded-sm border border-border bg-panel px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
             <div className="grid gap-1.5">
               <label
-                className="text-sm font-medium text-slate-900"
+                className="font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
                 htmlFor="password"
               >
                 Password
@@ -66,16 +66,16 @@ export default function LoginPage() {
                 type="password"
                 autoComplete="current-password"
                 required
-                className="rounded-md border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="rounded-sm border border-border bg-panel px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
             {error ? (
-              <p className="text-sm text-red-600">{error}</p>
+              <p className="text-sm text-destructive">{error}</p>
             ) : null}
             <button
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+              className="rounded-sm bg-primary px-4 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] text-primary-foreground hover:opacity-90 disabled:opacity-50"
               type="submit"
               disabled={loading}
             >
