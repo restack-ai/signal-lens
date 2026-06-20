@@ -14,15 +14,14 @@ import json
 from collections.abc import Iterator
 from typing import Any
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 
+from app import retrieval
 from app.config import settings
 from app.logging import get_logger
-from app.models import Company, RiskEvent, RiskTopic
 
 logger = get_logger(__name__)
 
-_MOCK_INGESTION_SOURCE = "mock_seed"
 _MAX_EVIDENCE = 8
 
 SYSTEM_PROMPT = (
@@ -46,38 +45,29 @@ def _source_label(source_type: str) -> str:
 
 
 def retrieve_evidence(
-    session: Session, ticker: str | None, limit: int = _MAX_EVIDENCE
+    session: Session,
+    question: str,
+    ticker: str | None,
+    limit: int = _MAX_EVIDENCE,
 ) -> list[dict[str, Any]]:
-    """Materialize the top evidence rows as plain dicts (no live DB session
-    needed during streaming)."""
-    query = (
-        select(RiskEvent, Company, RiskTopic)
-        .join(Company, RiskEvent.company_id == Company.id)
-        .join(RiskTopic, RiskEvent.topic_id == RiskTopic.id)
-    )
-    if settings.real_ingestion_mode:
-        query = query.where(RiskEvent.ingestion_source != _MOCK_INGESTION_SOURCE)
-    if ticker:
-        query = query.where(Company.ticker == ticker)
-    query = query.order_by(
-        RiskEvent.event_date.desc(), RiskEvent.risk_score.desc()
-    ).limit(limit)
-
-    rows = session.exec(query).all()
+    """Retrieve evidence most relevant to the question via semantic search
+    (pgvector KNN, recency fallback), materialized to plain dicts so no live
+    DB session is needed during streaming."""
+    events = retrieval.semantic_search(session, question, limit=limit, ticker=ticker)
     return [
         {
-            "id": event.id,
-            "ticker": company.ticker,
-            "company": company.name,
-            "topic": topic.name,
-            "source": _source_label(event.source_type),
-            "date": event.event_date.isoformat() if event.event_date else "",
-            "severity": event.severity,
-            "score": event.exposure_score or event.risk_score,
-            "title": event.title,
-            "excerpt": event.evidence_excerpt,
+            "id": e.id,
+            "ticker": e.ticker,
+            "company": e.company,
+            "topic": e.topic,
+            "source": _source_label(e.source_type),
+            "date": e.event_date.isoformat() if e.event_date else "",
+            "severity": e.severity,
+            "score": e.exposure_score or e.risk_score,
+            "title": e.title,
+            "excerpt": e.evidence_excerpt,
         }
-        for event, company, topic in rows
+        for e in events
     ]
 
 
