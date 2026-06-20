@@ -16,6 +16,8 @@ export function companyKey(company: string, ticker: string) {
   return `${company}:${ticker}`;
 }
 
+export type DerivedDashboard = ReturnType<typeof deriveDashboard>;
+
 export function deriveDashboard(
   data: DashboardData,
   selectedCompany: string | null,

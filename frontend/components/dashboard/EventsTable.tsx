@@ -14,10 +14,10 @@ import {
 import { type RiskEvent } from "@/lib/api";
 
 const severityFill: Record<string, string> = {
-  critical: "#dc2626",
-  high: "#f97316",
-  medium: "#f59e0b",
-  low: "#0f766e",
+  critical: "#f04438",
+  high: "#fb923c",
+  medium: "#fbbf24",
+  low: "#34d399",
 };
 
 function sourceLabel(sourceType: string) {
@@ -65,35 +65,35 @@ export function EventsTable({
           <TableBody>
             {events.map((event) => (
               <TableRow key={event.id}>
-                <TableCell className="whitespace-nowrap text-muted-foreground">
+                <TableCell className="whitespace-nowrap font-mono text-xs tabular-nums text-muted-foreground">
                   {event.event_date}
                 </TableCell>
                 <TableCell>
                   <button
-                    className="font-medium text-slate-950 hover:text-primary"
+                    className="font-medium text-foreground hover:text-primary"
                     onClick={() => onEventClick?.(event)}
                     type="button"
                   >
                     {event.company}
                   </button>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
                     {event.ticker}
                   </div>
                 </TableCell>
-                <TableCell>{event.topic_label}</TableCell>
+                <TableCell className="text-foreground/80">{event.topic_label}</TableCell>
                 <TableCell>
                   <Badge variant={event.severity}>{event.severity}</Badge>
                 </TableCell>
                 <TableCell className="min-w-[360px]">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{event.title}</span>
+                    <span className="font-medium text-foreground">{event.title}</span>
                     <Badge>{sourceLabel(event.source_type)}</Badge>
                   </div>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
                     {event.evidence_excerpt}
                   </p>
                   <a
-                    className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary"
+                    className="mt-2 inline-flex items-center gap-1 font-mono text-[11px] font-medium text-primary hover:underline"
                     href={event.source_url}
                     rel="noreferrer"
                     target="_blank"
@@ -103,10 +103,16 @@ export function EventsTable({
                   </a>
                 </TableCell>
                 <TableCell
-                  className="text-right font-semibold"
+                  className="text-right font-mono text-base font-bold tabular-nums"
                   style={{ color: scorePendingMode ? undefined : severityFill[event.severity] }}
                 >
-                  {scorePendingMode ? "Pending" : event.exposure_score || event.risk_score}
+                  {scorePendingMode ? (
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Pending
+                    </span>
+                  ) : (
+                    event.exposure_score || event.risk_score
+                  )}
                 </TableCell>
                 <TableCell className="min-w-[240px] text-xs leading-5 text-muted-foreground">
                   {event.suggested_action || (scorePendingMode ? "Run extraction/scoring" : "")}
@@ -118,13 +124,13 @@ export function EventsTable({
       </div>
 
       {total > pageSize ? (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>
+        <div className="flex items-center justify-between border-t border-border pt-3 font-mono text-xs text-muted-foreground">
+          <span className="tabular-nums">
             Showing {start}–{end} of {total} events
           </span>
           <div className="flex gap-2">
             <button
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-slate-50 disabled:opacity-40"
+              className="rounded-sm border border-border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider hover:border-border-strong hover:text-foreground disabled:opacity-30"
               disabled={page === 0}
               onClick={() => onPageChange(page - 1)}
               type="button"
@@ -132,7 +138,7 @@ export function EventsTable({
               Previous
             </button>
             <button
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-slate-50 disabled:opacity-40"
+              className="rounded-sm border border-border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider hover:border-border-strong hover:text-foreground disabled:opacity-30"
               disabled={page >= totalPages - 1}
               onClick={() => onPageChange(page + 1)}
               type="button"

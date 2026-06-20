@@ -4,15 +4,18 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-from sqlalchemy import func, text
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.auth.dependencies import get_current_user, get_optional_user, require_admin
 from app.auth.security import create_access_token, hash_password, verify_password
+from app import copilot, retrieval
 from app.config import settings
 from app.database import get_session, init_db
 from app.logging import RequestIDMiddleware, configure_logging, get_logger
@@ -432,74 +435,32 @@ def search_events(
     limit: int = Query(default=10, ge=1, le=100),
     session: Session = Depends(get_session),
 ) -> list[RiskEventRead]:
-    from app.extraction.extractor import RiskExtractor
+    return retrieval.semantic_search(session, q, limit=limit)
 
-    extractor = RiskExtractor()
-    query_embedding = extractor.embed(q)
-    if not query_embedding:
-        return _fetch_events(limit=limit, session=session)
 
-    embedding_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
+# ── Copilot (grounded streaming chat) ─────────────────────────────────────────
 
-    try:
-        rows = session.exec(
-            text(
-                """
-                SELECT e.id, c.id AS company_id, c.name AS company_name, c.ticker,
-                       t.name AS topic_name,
-                       e.source_type, e.source_name, e.source_url, e.extracted_at,
-                       e.event_date, e.severity, e.confidence, e.risk_score,
-                       e.exposure_score, e.summary, e.evidence_excerpt,
-                       e.risk_driver_summary, e.suggested_action,
-                       e.title, e.status, e.fetched_at, e.content_hash
-                FROM riskevent e
-                JOIN company c ON e.company_id = c.id
-                JOIN risktopic t ON e.topic_id = t.id
-                WHERE e.embedding IS NOT NULL
-                AND (:include_mock OR e.ingestion_source != :mock_ingestion_source)
-                ORDER BY e.embedding <=> CAST(:embedding AS vector)
-                LIMIT :limit
-                """
-            ).bindparams(
-                embedding=embedding_str,
-                include_mock=not settings.real_ingestion_mode,
-                mock_ingestion_source=_MOCK_INGESTION_SOURCE,
-                limit=limit,
-            )
-        ).all()  # type: ignore[call-overload]
-    except Exception:
-        # Fallback to recency-ordered results when pgvector is unavailable
-        # (e.g., during tests against SQLite).
-        return _fetch_events(limit=limit, session=session)
+class CopilotRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=1000)
+    ticker: Optional[str] = Field(default=None, max_length=16)
 
-    return [
-        RiskEventRead(
-            id=row.id,
-            title=row.title,
-            company_id=row.company_id,
-            company=row.company_name,
-            ticker=row.ticker,
-            topic=row.topic_name,
-            topic_label=row.topic_name,
-            source_type=row.source_type,
-            source_name=row.source_name,
-            source_url=row.source_url,
-            extracted_at=row.extracted_at,
-            event_date=row.event_date,
-            severity=row.severity,
-            confidence=row.confidence,
-            risk_score=row.risk_score,
-            exposure_score=row.exposure_score,
-            summary=row.summary,
-            evidence_excerpt=row.evidence_excerpt,
-            risk_driver_summary=row.risk_driver_summary,
-            suggested_action=row.suggested_action,
-            status=row.status,
-            fetched_at=row.fetched_at,
-            content_hash=row.content_hash,
-        )
-        for row in rows
-    ]
+
+@app.post("/copilot")
+@limiter.limit("20/minute")
+def copilot_chat(
+    request: Request,
+    body: CopilotRequest,
+    session: Session = Depends(get_session),
+) -> StreamingResponse:
+    # Materialize evidence before streaming so the DB session isn't held open
+    # for the duration of the model response.
+    evidence = copilot.retrieve_evidence(session, body.question, body.ticker)
+    context_label = body.ticker or "the portfolio"
+    return StreamingResponse(
+        copilot.stream_copilot(body.question, context_label, evidence),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────

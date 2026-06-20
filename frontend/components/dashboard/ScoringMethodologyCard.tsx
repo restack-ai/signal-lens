@@ -4,8 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 function Method({ label, body }: { label: string; body: string }) {
   return (
-    <div>
-      <div className="font-semibold text-slate-900">{label}</div>
+    <div className="border-l border-border-strong pl-3">
+      <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground">
+        {label}
+      </div>
       <p className="mt-1 leading-5 text-muted-foreground">{body}</p>
     </div>
   );
