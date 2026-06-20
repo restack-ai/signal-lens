@@ -6,24 +6,24 @@ import { type TopicHeatmapCell } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 function heatColor(score: number) {
-  if (score >= 78) return "bg-red-500 text-white";
-  if (score >= 66) return "bg-orange-400 text-white";
-  if (score >= 54) return "bg-amber-300 text-slate-950";
-  if (score > 0) return "bg-teal-100 text-teal-950";
-  return "bg-slate-100 text-slate-400";
+  if (score >= 78) return "bg-signal-critical text-background";
+  if (score >= 66) return "bg-signal-high text-background";
+  if (score >= 54) return "bg-signal-medium text-background";
+  if (score > 0) return "bg-signal-low/15 text-signal-low ring-1 ring-inset ring-signal-low/25";
+  return "bg-muted/40 text-muted-foreground/40";
 }
 
 const TOPICS = [
-  { label: "Regulation", short: "Reg" },
-  { label: "Litigation", short: "Lit" },
-  { label: "Cybersecurity", short: "Cyb" },
-  { label: "Labor", short: "Lab" },
-  { label: "Supply Chain", short: "Sup" },
-  { label: "Climate", short: "Cli" },
-  { label: "Accounting", short: "Acc" },
-  { label: "Product Safety", short: "Saf" },
-  { label: "Management", short: "Mgt" },
-  { label: "Geopolitics", short: "Geo" },
+  { label: "Regulation", short: "REG" },
+  { label: "Litigation", short: "LIT" },
+  { label: "Cybersecurity", short: "CYB" },
+  { label: "Labor", short: "LAB" },
+  { label: "Supply Chain", short: "SUP" },
+  { label: "Climate", short: "CLI" },
+  { label: "Accounting", short: "ACC" },
+  { label: "Product Safety", short: "SAF" },
+  { label: "Management", short: "MGT" },
+  { label: "Geopolitics", short: "GEO" },
 ];
 
 export function TopicHeatmap({
@@ -43,20 +43,18 @@ export function TopicHeatmap({
   );
 
   return (
-    <div
-      role="grid"
-      aria-label="Risk topic heatmap"
-      className="overflow-x-auto"
-    >
+    <div role="grid" aria-label="Risk topic heatmap" className="overflow-x-auto">
       <div
         className="grid min-w-[760px] gap-1"
-        style={{ gridTemplateColumns: "154px repeat(10, 46px)" }}
+        style={{ gridTemplateColumns: "160px repeat(10, 1fr)" }}
       >
-        <div className="text-xs font-medium text-muted-foreground">Company</div>
+        <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+          Issuer
+        </div>
         {TOPICS.map((topic) => (
           <div
             key={topic.label}
-            className="truncate text-xs text-muted-foreground"
+            className="truncate text-center font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
             title={topic.label}
           >
             {topic.short}
@@ -68,8 +66,9 @@ export function TopicHeatmap({
             <Fragment key={company}>
               <button
                 className={cn(
-                  "truncate rounded-sm px-1 text-left text-sm font-medium hover:bg-slate-100",
-                  isSelected && "bg-slate-900 text-white hover:bg-slate-900",
+                  "truncate rounded-sm px-1.5 py-1 text-left text-xs font-medium text-foreground/80 hover:bg-muted/60 hover:text-foreground",
+                  isSelected &&
+                    "bg-primary/15 text-primary ring-1 ring-inset ring-primary/40 hover:bg-primary/15",
                 )}
                 onClick={() => onCellClick?.(company, "")}
                 type="button"
@@ -85,11 +84,14 @@ export function TopicHeatmap({
                     role="gridcell"
                     aria-label={`${company} ${topic.label}: score ${score}`}
                     title={`${company} ${topic.label}: ${score}`}
-                    className={`flex h-8 items-center justify-center rounded-sm text-xs font-semibold ring-offset-2 hover:ring-2 hover:ring-primary ${heatColor(score)}`}
+                    className={cn(
+                      "flex h-7 items-center justify-center rounded-sm font-mono text-[11px] font-semibold tabular-nums transition-shadow hover:ring-2 hover:ring-primary",
+                      heatColor(score),
+                    )}
                     onClick={() => onCellClick?.(company, topic.label)}
                     type="button"
                   >
-                    {cell?.score ?? "-"}
+                    {cell?.score ?? "·"}
                   </button>
                 );
               })}
