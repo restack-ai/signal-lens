@@ -15,7 +15,7 @@ The local demo supports two operating modes:
 
 ## Dashboard Preview
 
-![SignalLens dashboard showing real ingestion risk signals, portfolio exposure, selected-company detail, and evidence excerpts](./docs/assets/screenshot.png)
+![SignalLens risk terminal — KPI tape, AI portfolio briefing, exposure distribution, ranked issuer watchlist, risk-topic heatmap, and the grounded "Ask the Lens" copilot](./docs/assets/screenshot.png)
 
 ## Architecture
 
