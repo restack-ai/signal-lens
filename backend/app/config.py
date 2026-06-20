@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_extraction_model: str = "claude-sonnet-4-6"
     anthropic_summary_model: str = "claude-haiku-4-5-20251001"
+    anthropic_copilot_model: str = "claude-opus-4-8"
     openai_api_key: str = ""
     openai_embedding_model: str = "text-embedding-3-small"
     secret_key: str = "dev-secret-change-in-prod"  # JWT signing

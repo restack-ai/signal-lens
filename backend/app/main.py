@@ -4,7 +4,9 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -13,6 +15,7 @@ from sqlmodel import Session, select
 
 from app.auth.dependencies import get_current_user, get_optional_user, require_admin
 from app.auth.security import create_access_token, hash_password, verify_password
+from app import copilot
 from app.config import settings
 from app.database import get_session, init_db
 from app.logging import RequestIDMiddleware, configure_logging, get_logger
@@ -500,6 +503,31 @@ def search_events(
         )
         for row in rows
     ]
+
+
+# ── Copilot (grounded streaming chat) ─────────────────────────────────────────
+
+class CopilotRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=1000)
+    ticker: Optional[str] = Field(default=None, max_length=16)
+
+
+@app.post("/copilot")
+@limiter.limit("20/minute")
+def copilot_chat(
+    request: Request,
+    body: CopilotRequest,
+    session: Session = Depends(get_session),
+) -> StreamingResponse:
+    # Materialize evidence before streaming so the DB session isn't held open
+    # for the duration of the model response.
+    evidence = copilot.retrieve_evidence(session, body.ticker)
+    context_label = body.ticker or "the portfolio"
+    return StreamingResponse(
+        copilot.stream_copilot(body.question, context_label, evidence),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
